@@ -1,0 +1,1389 @@
+// Auto Shop Web App - MySQL schema (MySQL 8 / MariaDB 10.6+, as shipped by cPanel)
+//
+// Conventions enforced here (build guide / 06 "Database and tenant boundaries"):
+//  * Every tenant-owned row carries organizationId. Location-specific rows also
+//    carry locationId.
+//  * Money is stored as an integer count of minor units (US cents) plus a
+//    currency code. Never a float.
+//  * Quantities and labor hours are fixed-precision Decimal.
+//  * Timestamps are UTC. Identifiers are UUIDs.
+//  * Posted financial rows are append-only; corrections are reversing entries.
+
+generator client {
+  provider      = "prisma-client-js"
+  // cPanel/CloudLinux hosts are RHEL-family; the Debian targets cover the
+  // occasional Ubuntu-based container. "native" keeps local development working.
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "debian-openssl-3.0.x", "debian-openssl-1.1.x"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  OWNER
+  MANAGER
+  SERVICE_ADVISOR
+  TECHNICIAN
+  BOOKKEEPER
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  CHECKED_IN
+  NO_SHOW
+  CANCELLED
+  CONVERTED
+}
+
+enum EstimateStatus {
+  DRAFT
+  SENT
+  APPROVED
+  PARTLY_APPROVED
+  DECLINED
+  EXPIRED
+  SUPERSEDED
+}
+
+enum RepairOrderStatus {
+  SCHEDULED
+  CHECKED_IN
+  DIAGNOSING
+  AWAITING_APPROVAL
+  AWAITING_PARTS
+  IN_PROGRESS
+  QUALITY_CHECK
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTLY_PAID
+  PAID
+  CREDITED
+  VOID
+}
+
+enum PaymentAttemptStatus {
+  CREATED
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  UNKNOWN
+}
+
+enum PaymentStatus {
+  SUCCEEDED
+  REFUNDED
+  PARTLY_REFUNDED
+  DISPUTED
+  REVERSED
+}
+
+enum PaymentMethod {
+  CARD_ONLINE
+  CARD_TERMINAL
+  // Customer scans a code with their phone and pays through the same online
+  // checkout as CARD_ONLINE; the QR only encodes that checkout link.
+  QR_CODE
+  CASH
+  CHECK
+  ACH
+  OTHER
+  // Card taken on a separate card machine that is not connected to this app.
+  // Recorded by hand like cash, but it clears through the processor account,
+  // not the cash drawer.
+  CARD_EXTERNAL
+}
+
+enum InventoryKind {
+  TIRE
+  MUFFLER
+  OTHER
+}
+
+enum InventoryUnitStatus {
+  IN_STOCK
+  SOLD
+  // Written off: damaged, returned to the supplier, lost.
+  REMOVED
+}
+
+enum BookingRequestStatus {
+  NEW
+  CONTACTED
+  BOOKED
+  CLOSED
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACTOR
+}
+
+enum PayType {
+  HOURLY
+  SALARY
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum LineType {
+  PART
+  LABOR
+  FEE
+  SUBLET
+  DISCOUNT
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  BLOCKED
+  DONE
+}
+
+enum InspectionResult {
+  OK
+  ADVISE
+  URGENT
+  NOT_CHECKED
+}
+
+enum ProviderKind {
+  PAYMENT
+  VEHICLE_DATA
+  PARTS
+  REPAIR_DATA
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+enum ReconciliationStatus {
+  OPEN
+  RESOLVED
+  IGNORED
+}
+
+// ---------------------------------------------------------------------------
+// Business access: Organization -> Locations -> Memberships
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id              String   @id @default(uuid())
+  name            String
+  legalName       String?
+  currency        String   @default("USD")
+  timezone        String   @default("America/Chicago")
+  // Sales tax is a liability, never revenue. Rate in basis points (825 = 8.25%).
+  taxRateBps      Int      @default(0)
+  taxesParts      Boolean  @default(true)
+  taxesLabor      Boolean  @default(false)
+  taxesFees       Boolean  @default(false)
+  // Which payment provider this tenant may actually use. Never surface an
+  // unimplemented provider to the UI.
+  paymentProvider String   @default("mock")
+  // The shop the public website (booking, estimate lookup) belongs to. Public
+  // endpoints resolve the tenant from PUBLIC_SHOP_SLUG, never from the request.
+  publicSlug      String?  @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  locations           Location[]
+  memberships         Membership[]
+  customers           Customer[]
+  vehicles            Vehicle[]
+  appointments        Appointment[]
+  inspections         Inspection[]
+  estimates           Estimate[]
+  repairOrders        RepairOrder[]
+  invoices            Invoice[]
+  payments            Payment[]
+  paymentAttempts     PaymentAttempt[]
+  refunds             Refund[]
+  creditNotes         CreditNote[]
+  accounts            Account[]
+  journalEntries      JournalEntry[]
+  expenses            Expense[]
+  suppliers           Supplier[]
+  catalogItems        CatalogItem[]
+  laborRates          LaborRate[]
+  cashSessions        CashSession[]
+  auditEvents         AuditEvent[]
+  outboxEvents        OutboxEvent[]
+  webhookInbox        WebhookInbox[]
+  providerConnections ProviderConnection[]
+  reconciliationItems ReconciliationItem[]
+  customerDeposits    CustomerDeposit[]
+  shiftClockEntries   ShiftClockEntry[]
+  inventoryProducts   InventoryProduct[]
+  inventoryUnits      InventoryUnit[]
+  bookingRequests     BookingRequest[]
+
+  @@map("organizations")
+}
+
+model Location {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  code           String
+  addressLine1   String?
+  addressLine2   String?
+  city           String?
+  state          String?
+  postalCode     String?
+  phone          String?
+  timezone       String   @default("America/Chicago")
+  bayCount       Int      @default(3)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  memberships  Membership[]
+  appointments Appointment[]
+  repairOrders RepairOrder[]
+  invoices     Invoice[]
+  expenses     Expense[]
+  cashSessions CashSession[]
+  estimates    Estimate[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("locations")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  phone        String?
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  // Sessions issued before this moment are rejected, so changing a password
+  // signs out every other device.
+  passwordChangedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  memberships  Membership[]
+  timeEntries  TimeEntry[]
+  auditEvents  AuditEvent[]
+  cashSessions CashSession[]
+  shiftClockEntries ShiftClockEntry[]
+
+  @@map("users")
+}
+
+// Access is derived from membership, never from a shop id supplied by the
+// browser (build guide / 06).
+//
+// Employment terms live here, not on User: the same person can work
+// different hours at different rates at different shops (build guide / 01,
+// "one user can belong to several businesses").
+model Membership {
+  id             String   @id @default(uuid())
+  userId         String
+  organizationId String
+  // null = access to every location in the organization
+  locationId     String?
+  role           Role
+  isActive       Boolean  @default(true)
+
+  employmentType EmploymentType?
+  payType        PayType?
+  // Hourly rate or per-pay-period salary, in minor units. Never derived from
+  // a job's labor rate: what the shop charges a customer and what it pays a
+  // worker are unrelated numbers.
+  payRateCents   Int?
+  hireDate       DateTime?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, organizationId, locationId])
+  @@index([organizationId])
+  @@map("memberships")
+}
+
+// General "on the clock" time, separate from TimeEntry (which is worked time
+// against one specific job). A technician can be clocked in for a shift while
+// moving between several jobs, or clocked in with no job at all (cleaning,
+// receiving a parts delivery, covering the desk).
+model ShiftClockEntry {
+  id             String    @id @default(uuid())
+  organizationId String
+  userId         String
+  locationId     String?
+  clockInAt      DateTime  @default(now())
+  clockOutAt     DateTime?
+  note           String? @db.Text
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, userId, clockInAt])
+  @@map("shift_clock_entries")
+}
+
+// ---------------------------------------------------------------------------
+// CRM and vehicles
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id              String    @id @default(uuid())
+  organizationId  String
+  firstName       String
+  lastName        String
+  companyName     String?
+  email           String?
+  phone           String?
+  addressLine1    String?
+  city            String?
+  state           String?
+  postalCode      String?
+  notes           String? @db.Text
+  // Transactional messages stay separate from marketing preference.
+  allowsMarketing Boolean   @default(false)
+  allowsSms       Boolean   @default(true)
+  taxExempt       Boolean   @default(false)
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vehicles     CustomerVehicle[]
+  appointments Appointment[]
+  estimates    Estimate[]
+  repairOrders RepairOrder[]
+  invoices     Invoice[]
+  payments     Payment[]
+  deposits     CustomerDeposit[]
+  creditNotes  CreditNote[]
+
+  @@index([organizationId, lastName])
+  @@index([organizationId, phone])
+  @@map("customers")
+}
+
+model Vehicle {
+  id             String    @id @default(uuid())
+  organizationId String
+  vin            String?
+  plate          String?
+  plateState     String?
+  year           Int?
+  make           String?
+  model          String?
+  trim           String?
+  engine         String?
+  color          String?
+  // Provenance for decoded data (build guide / 06 "Provenance and history").
+  vinSource      String?
+  vinDecodedAt   DateTime?
+  vinRaw         Json?
+  vinCorrectedBy String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owners          CustomerVehicle[]
+  mileageReadings MileageReading[]
+  appointments    Appointment[]
+  estimates       Estimate[]
+  repairOrders    RepairOrder[]
+  inspections     Inspection[]
+
+  @@unique([organizationId, vin])
+  @@index([organizationId, plate])
+  @@map("vehicles")
+}
+
+model CustomerVehicle {
+  id         String   @id @default(uuid())
+  customerId String
+  vehicleId  String
+  isPrimary  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  vehicle  Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, vehicleId])
+  @@map("customer_vehicles")
+}
+
+model MileageReading {
+  id         String   @id @default(uuid())
+  vehicleId  String
+  miles      Int
+  observedAt DateTime @default(now())
+  source     String   @default("advisor")
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, observedAt])
+  @@map("mileage_readings")
+}
+
+// ---------------------------------------------------------------------------
+// Repair workflow
+// ---------------------------------------------------------------------------
+
+model Appointment {
+  id             String            @id @default(uuid())
+  organizationId String
+  locationId     String
+  customerId     String
+  vehicleId      String
+  scheduledFor   DateTime
+  estimatedHours Decimal           @default(1.0) @db.Decimal(6, 2)
+  concern        String @db.Text
+  requestedWork  String? @db.Text
+  mileageIn      Int?
+  status         AppointmentStatus @default(SCHEDULED)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  vehicle      Vehicle      @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  repairOrder  RepairOrder?
+
+  @@index([organizationId, scheduledFor])
+  @@index([locationId, status])
+  @@map("appointments")
+}
+
+model Inspection {
+  id             String    @id @default(uuid())
+  organizationId String
+  vehicleId      String
+  repairOrderId  String?
+  performedById  String?
+  title          String    @default("Multi-point inspection")
+  notes          String? @db.Text
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vehicle      Vehicle          @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  repairOrder  RepairOrder?     @relation(fields: [repairOrderId], references: [id], onDelete: SetNull)
+  items        InspectionItem[]
+
+  @@index([organizationId, vehicleId])
+  @@map("inspections")
+}
+
+model InspectionItem {
+  id           String           @id @default(uuid())
+  inspectionId String
+  category     String
+  label        String
+  result       InspectionResult @default(NOT_CHECKED)
+  note         String? @db.Text
+  // File metadata carries tenant ownership and access scope; the object itself
+  // lives in private object storage behind signed links.
+  // MySQL has no scalar list type. This is a JSON array of storage keys;
+  // read it with readStringArray() from lib/json.ts, never as a native array.
+  photoKeys    Json?
+  sortOrder    Int              @default(0)
+
+  inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@index([inspectionId])
+  @@map("inspection_items")
+}
+
+// An estimate is the container. Customers approve an immutable VERSION,
+// never the container (build guide / 04).
+model Estimate {
+  id             String         @id @default(uuid())
+  organizationId String
+  locationId     String
+  customerId     String
+  vehicleId      String
+  repairOrderId  String?
+  number         String
+  status         EstimateStatus @default(DRAFT)
+  currentVersion Int            @default(1)
+  expiresAt      DateTime?
+  createdById    String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location          @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  customer     Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  vehicle      Vehicle           @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  repairOrder  RepairOrder?      @relation(fields: [repairOrderId], references: [id], onDelete: SetNull)
+  versions     EstimateVersion[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+  @@map("estimates")
+}
+
+model EstimateVersion {
+  id                     String         @id @default(uuid())
+  estimateId             String
+  version                Int
+  status                 EstimateStatus @default(DRAFT)
+  // Server-calculated totals, minor units.
+  subtotal               Int            @default(0)
+  discountTotal          Int            @default(0)
+  taxTotal               Int            @default(0)
+  total                  Int            @default(0)
+  currency               String         @default("USD")
+  taxRateBps             Int            @default(0)
+  notes                  String? @db.Text
+  sentAt                 DateTime?
+  // A single-resource, expiring approval token (build guide / 03).
+  approvalToken          String?        @unique
+  approvalTokenExpiresAt DateTime?
+  frozenAt               DateTime?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  estimate  Estimate           @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  lines     EstimateLine[]
+  approvals EstimateApproval[]
+
+  @@unique([estimateId, version])
+  @@index([estimateId])
+  @@map("estimate_versions")
+}
+
+model EstimateLine {
+  id                String   @id @default(uuid())
+  estimateVersionId String
+  lineType          LineType
+  description       String @db.Text
+  quantity          Decimal  @default(1) @db.Decimal(10, 3)
+  // Unit price and unit cost in minor units.
+  unitPrice         Int      @default(0)
+  unitCost          Int      @default(0)
+  hours             Decimal? @db.Decimal(6, 2)
+  taxable           Boolean  @default(true)
+  catalogItemId     String?
+  lineTotal         Int      @default(0)
+  sortOrder         Int      @default(0)
+  // Set when the customer approves only part of the estimate.
+  approved          Boolean  @default(false)
+
+  estimateVersion EstimateVersion @relation(fields: [estimateVersionId], references: [id], onDelete: Cascade)
+  catalogItem     CatalogItem?    @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+
+  @@index([estimateVersionId])
+  @@map("estimate_lines")
+}
+
+// Immutable evidence of what the customer agreed to and when.
+model EstimateApproval {
+  id                String   @id @default(uuid())
+  estimateVersionId String
+  // JSON array of estimate line ids (see photoKeys above for the reason).
+  approvedLineIds   Json?
+  approvedTotal     Int
+  partial           Boolean  @default(false)
+  declined          Boolean  @default(false)
+  method            String   @default("web_link")
+  approverName      String?
+  approverIp        String?
+  userAgent         String? @db.Text
+  createdAt         DateTime @default(now())
+
+  estimateVersion EstimateVersion @relation(fields: [estimateVersionId], references: [id], onDelete: Cascade)
+
+  @@index([estimateVersionId])
+  @@map("estimate_approvals")
+}
+
+model RepairOrder {
+  id               String            @id @default(uuid())
+  organizationId   String
+  locationId       String
+  customerId       String
+  vehicleId        String
+  appointmentId    String?           @unique
+  number           String
+  status           RepairOrderStatus @default(SCHEDULED)
+  concern          String @db.Text
+  mileageIn        Int?
+  mileageOut       Int?
+  promisedAt       DateTime?
+  checkedInAt      DateTime?
+  readyAt          DateTime?
+  deliveredAt      DateTime?
+  closedAt         DateTime?
+  // Set when not all costs are captured yet; reports must show job margin as
+  // provisional in that case (build guide / 07).
+  costsProvisional Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  version          Int               @default(0)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  customer     Customer       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  vehicle      Vehicle        @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  appointment  Appointment?   @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  estimates    Estimate[]
+  inspections  Inspection[]
+  tasks        RepairTask[]
+  timeEntries  TimeEntry[]
+  partUsages   JobPartUsage[]
+  invoices     Invoice[]
+
+  @@unique([organizationId, number])
+  @@index([locationId, status])
+  @@map("repair_orders")
+}
+
+model RepairTask {
+  id             String     @id @default(uuid())
+  repairOrderId  String
+  description    String @db.Text
+  status         TaskStatus @default(PENDING)
+  assignedToId   String?
+  estimatedHours Decimal    @default(0) @db.Decimal(6, 2)
+  sortOrder      Int        @default(0)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  repairOrder RepairOrder @relation(fields: [repairOrderId], references: [id], onDelete: Cascade)
+
+  @@index([repairOrderId])
+  @@map("repair_tasks")
+}
+
+model TimeEntry {
+  id            String    @id @default(uuid())
+  repairOrderId String
+  technicianId  String
+  startedAt     DateTime
+  endedAt       DateTime?
+  // Denormalized for reporting: billed vs worked hours.
+  workedHours   Decimal   @default(0) @db.Decimal(6, 2)
+  note          String? @db.Text
+  createdAt     DateTime  @default(now())
+
+  repairOrder RepairOrder @relation(fields: [repairOrderId], references: [id], onDelete: Cascade)
+  technician  User        @relation(fields: [technicianId], references: [id], onDelete: Restrict)
+
+  @@index([repairOrderId])
+  @@index([technicianId, startedAt])
+  @@map("time_entries")
+}
+
+// ---------------------------------------------------------------------------
+// Parts
+// ---------------------------------------------------------------------------
+
+model Supplier {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  accountNumber  String?
+  phone          String?
+  email          String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  catalogItems CatalogItem[]
+  partUsages   JobPartUsage[]
+
+  @@unique([organizationId, name])
+  @@map("suppliers")
+}
+
+model CatalogItem {
+  id             String   @id @default(uuid())
+  organizationId String
+  supplierId     String?
+  partNumber     String
+  description    String @db.Text
+  category       String   @default("Parts")
+  // Current list cost/price in minor units. Historical margins must be read
+  // from the invoice snapshot, never rebuilt from this row.
+  costCents      Int      @default(0)
+  priceCents     Int      @default(0)
+  onHand         Decimal  @default(0) @db.Decimal(10, 2)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier      Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  estimateLines EstimateLine[]
+  partUsages    JobPartUsage[]
+  fitments      PartFitment[]
+
+  @@unique([organizationId, partNumber])
+  // MySQL cannot index a TEXT column without a prefix length. 191 characters is
+  // what a default VARCHAR would have indexed, and longer part descriptions
+  // stay searchable because the filter is `contains`, which rechecks the row.
+  @@index([organizationId, description(length: 191)])
+  @@map("catalog_items")
+}
+
+// Which vehicles a stocked part actually fits, tagged by the shop itself.
+//
+// This is NOT a licensed universal parts catalog (build guide / 10 names
+// those as commercial candidates requiring a partner agreement: PartsTech,
+// Nexpart, AutoZone, AdvancePro). It is fitment data the shop enters against
+// its OWN inventory, so "brake pads for a 2019 Honda Accord" resolves to
+// something actually on the shelf. Make/model text is free-typed but is
+// normally filled from the NHTSA vPIC make/model lookup, the same free public
+// source the VIN decoder already uses.
+model PartFitment {
+  id            String  @id @default(uuid())
+  catalogItemId String
+  make          String
+  model         String
+  // Inclusive year range. Equal bounds means "this year only".
+  yearFrom      Int
+  yearTo        Int
+  notes         String? @db.Text
+
+  catalogItem CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  @@index([catalogItemId])
+  @@index([make, model])
+  @@map("part_fitments")
+}
+
+// Parts actually consumed on a job. Direct job cost reads from here, not from
+// the estimate (build guide / 07).
+model JobPartUsage {
+  id            String   @id @default(uuid())
+  repairOrderId String
+  catalogItemId String?
+  supplierId    String?
+  partNumber    String
+  description   String @db.Text
+  quantity      Decimal  @db.Decimal(10, 3)
+  unitCost      Int
+  unitPrice     Int
+  returned      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  repairOrder RepairOrder  @relation(fields: [repairOrderId], references: [id], onDelete: Cascade)
+  catalogItem CatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  supplier    Supplier?    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@index([repairOrderId])
+  @@map("job_part_usages")
+}
+
+// ---------------------------------------------------------------------------
+// Serialised inventory: tires and mufflers
+// ---------------------------------------------------------------------------
+
+// One stocked product (a tire model in one size, a muffler part number). The
+// on-hand count is never stored: it is the number of IN_STOCK units, so it
+// cannot drift from the serial list.
+model InventoryProduct {
+  id             String        @id @default(uuid())
+  organizationId String
+  kind           InventoryKind
+  brand          String?
+  name           String
+  // Tire size (225/65R17) or muffler fit (2.25" in / 2.25" out).
+  size           String?
+  sku            String?
+  costCents      Int           @default(0)
+  priceCents     Int           @default(0)
+  // Remind the shop to reorder when in-stock units fall to this number.
+  reorderPoint   Int           @default(4)
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  units        InventoryUnit[]
+
+  @@index([organizationId, kind])
+  @@map("inventory_products")
+}
+
+// One physical item, keyed by the serial number the shop types or scans in.
+model InventoryUnit {
+  id             String              @id @default(uuid())
+  organizationId String
+  productId      String
+  serialNumber   String
+  status         InventoryUnitStatus @default(IN_STOCK)
+  // Actual cost of this unit when it differs from the product's list cost.
+  costCents      Int?
+  receivedAt     DateTime            @default(now())
+  soldAt         DateTime?
+  invoiceId      String?
+  invoiceLineId  String?
+  note           String? @db.Text
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      InventoryProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  invoice      Invoice?         @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoiceLine  InvoiceLine?     @relation(fields: [invoiceLineId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, serialNumber])
+  @@index([productId, status])
+  @@index([invoiceId])
+  @@map("inventory_units")
+}
+
+// A service request from the public website. Deliberately not an Appointment:
+// it has no customer or vehicle record yet, and staff confirm it by phone.
+model BookingRequest {
+  id             String               @id @default(uuid())
+  organizationId String
+  name           String
+  phone          String
+  email          String?
+  vehicle        String?
+  service        String
+  preferredDate  DateTime?
+  preferredTime  String?
+  notes          String? @db.Text
+  status         BookingRequestStatus @default(NEW)
+  ip             String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status, createdAt])
+  @@map("booking_requests")
+}
+
+model LaborRate {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  ratePerHour    Int
+  // Shop's cost of that labor hour, used for direct job cost allocation.
+  costPerHour    Int      @default(0)
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@map("labor_rates")
+}
+
+// ---------------------------------------------------------------------------
+// Billing
+// ---------------------------------------------------------------------------
+
+// Issuing an invoice freezes description, quantity, price, discount, tax and
+// customer details into the snapshot below (build guide / 04 step 6).
+model Invoice {
+  id              String        @id @default(uuid())
+  organizationId  String
+  locationId      String
+  customerId      String
+  repairOrderId   String?
+  number          String
+  status          InvoiceStatus @default(DRAFT)
+  currency        String        @default("USD")
+  subtotal        Int           @default(0)
+  discountTotal   Int           @default(0)
+  taxTotal        Int           @default(0)
+  total           Int           @default(0)
+  // Running figures maintained by the allocation logic.
+  amountPaid      Int           @default(0)
+  amountCredited  Int           @default(0)
+  issuedAt        DateTime?
+  dueAt           DateTime?
+  paidAt          DateTime?
+  voidedAt        DateTime?
+  // Frozen copy of the customer and vehicle as of issuance.
+  billToSnapshot  Json?
+  vehicleSnapshot Json?
+  notes           String? @db.Text
+  // Set by the counter's quick-sale screen so a double tap or a retry returns
+  // the same invoice instead of billing twice.
+  idempotencyKey  String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  version         Int           @default(0)
+
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location            Location             @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  customer            Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  repairOrder         RepairOrder?         @relation(fields: [repairOrderId], references: [id], onDelete: SetNull)
+  lines               InvoiceLine[]
+  allocations         PaymentAllocation[]
+  attempts            PaymentAttempt[]
+  creditNotes         CreditNote[]
+  depositApplications DepositApplication[]
+  inventoryUnits      InventoryUnit[]
+
+  @@unique([organizationId, number])
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, status])
+  @@index([customerId])
+  @@map("invoices")
+}
+
+// Immutable once the parent invoice is issued.
+model InvoiceLine {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  lineType    LineType
+  description String @db.Text
+  quantity    Decimal  @db.Decimal(10, 3)
+  unitPrice   Int
+  unitCost    Int      @default(0)
+  hours       Decimal? @db.Decimal(6, 2)
+  taxable     Boolean  @default(true)
+  taxRateBps  Int      @default(0)
+  lineTotal   Int
+  taxAmount   Int      @default(0)
+  sortOrder   Int      @default(0)
+
+  invoice        Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  // Serial-numbered tires or mufflers sold on this line, printed on the receipt.
+  inventoryUnits InventoryUnit[]
+
+  @@index([invoiceId])
+  @@map("invoice_lines")
+}
+
+// A credit note reduces revenue/tax/receivable. It is NOT a refund; a refund
+// moves money (build guide / 08).
+model CreditNote {
+  id             String   @id @default(uuid())
+  organizationId String
+  invoiceId      String
+  customerId     String
+  number         String
+  amount         Int
+  taxAmount      Int      @default(0)
+  reason         String @db.Text
+  issuedById     String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, number])
+  @@index([invoiceId])
+  @@map("credit_notes")
+}
+
+// One row per attempt at moving money through a provider. The browser is never
+// trusted to declare success (build guide / 09).
+model PaymentAttempt {
+  id             String               @id @default(uuid())
+  organizationId String
+  invoiceId      String
+  provider       String
+  method         PaymentMethod
+  amount         Int
+  currency       String               @default("USD")
+  status         PaymentAttemptStatus @default(CREATED)
+  // Stable idempotency key supplied by the client and enforced here.
+  idempotencyKey String
+  externalId     String?
+  externalStatus String?
+  failureCode    String?
+  failureMessage String? @db.Text
+  // Where the customer or terminal completes the payment.
+  checkoutUrl    String? @db.Text
+  resolvedAt     DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  payment      Payment?
+
+  @@unique([organizationId, idempotencyKey])
+  // Provider event uniqueness must include provider + merchant identity.
+  @@unique([provider, externalId])
+  @@index([invoiceId])
+  @@map("payment_attempts")
+}
+
+model Payment {
+  id              String        @id @default(uuid())
+  organizationId  String
+  customerId      String
+  attemptId       String?       @unique
+  provider        String
+  method          PaymentMethod
+  amount          Int
+  currency        String        @default("USD")
+  // Processor fee, tracked separately from the sale.
+  feeAmount       Int           @default(0)
+  amountRefunded  Int           @default(0)
+  status          PaymentStatus @default(SUCCEEDED)
+  externalId      String?
+  receivedAt      DateTime      @default(now())
+  // Set once the funds are confirmed received in the bank, not when the
+  // processor says a payout is on its way.
+  bankConfirmedAt DateTime?
+  recordedById    String?
+  // Hand-recorded payments: last four digits or approval code from the other
+  // card machine, check number, and so on. Printed on the receipt.
+  reference       String?
+  // Cash handed over, when more than the amount applied. Receipt shows change.
+  tenderedAmount  Int?
+  createdAt       DateTime      @default(now())
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  attempt      PaymentAttempt?     @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+  allocations  PaymentAllocation[]
+  refunds      Refund[]
+
+  @@index([organizationId, receivedAt])
+  @@map("payments")
+}
+
+// One payment may settle several invoices; one invoice may take many payments.
+model PaymentAllocation {
+  id        String   @id @default(uuid())
+  paymentId String
+  invoiceId String
+  amount    Int
+  createdAt DateTime @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@unique([paymentId, invoiceId])
+  @@index([invoiceId])
+  @@map("payment_allocations")
+}
+
+model Refund {
+  id             String       @id @default(uuid())
+  organizationId String
+  paymentId      String
+  amount         Int
+  reason         String
+  status         RefundStatus @default(PENDING)
+  provider       String
+  externalId     String?
+  idempotencyKey String
+  requestedById  String?
+  createdAt      DateTime     @default(now())
+  resolvedAt     DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payment      Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([paymentId])
+  @@map("refunds")
+}
+
+// Deposits are a liability until applied to an invoice.
+model CustomerDeposit {
+  id             String   @id @default(uuid())
+  organizationId String
+  customerId     String
+  amount         Int
+  amountApplied  Int      @default(0)
+  note           String? @db.Text
+  createdAt      DateTime @default(now())
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  applications DepositApplication[]
+
+  @@index([customerId])
+  @@map("customer_deposits")
+}
+
+model DepositApplication {
+  id        String   @id @default(uuid())
+  depositId String
+  invoiceId String
+  amount    Int
+  createdAt DateTime @default(now())
+
+  deposit CustomerDeposit @relation(fields: [depositId], references: [id], onDelete: Cascade)
+  invoice Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("deposit_applications")
+}
+
+// ---------------------------------------------------------------------------
+// Finance subledger
+// ---------------------------------------------------------------------------
+
+model Account {
+  id             String      @id @default(uuid())
+  organizationId String
+  code           String
+  name           String
+  type           AccountType
+  isSystem       Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lines        JournalLine[]
+
+  @@unique([organizationId, code])
+  @@map("accounts")
+}
+
+// Append-only. Corrections are a new linked reversing entry, never an edit.
+model JournalEntry {
+  id             String   @id @default(uuid())
+  organizationId String
+  entryDate      DateTime @default(now())
+  memo           String @db.Text
+  // What caused this entry, for drill-down and reconciliation.
+  sourceType     String
+  sourceId       String
+  reversesId     String?  @unique
+  postedById     String?
+  createdAt      DateTime @default(now())
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lines        JournalLine[]
+  reverses     JournalEntry? @relation("Reversal", fields: [reversesId], references: [id], onDelete: SetNull)
+  reversedBy   JournalEntry? @relation("Reversal")
+
+  @@index([organizationId, entryDate])
+  @@index([sourceType, sourceId])
+  @@map("journal_entries")
+}
+
+model JournalLine {
+  id             String  @id @default(uuid())
+  journalEntryId String
+  accountId      String
+  debit          Int     @default(0)
+  credit         Int     @default(0)
+  memo           String? @db.Text
+
+  journalEntry JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account      Account      @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([journalEntryId])
+  @@index([accountId])
+  @@map("journal_lines")
+}
+
+model Expense {
+  id             String   @id @default(uuid())
+  organizationId String
+  locationId     String
+  category       String
+  vendor         String
+  description    String? @db.Text
+  amount         Int
+  isCash         Boolean  @default(false)
+  incurredOn     DateTime @default(now())
+  receiptKey     String?
+  recordedById   String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, incurredOn])
+  @@map("expenses")
+}
+
+model CashSession {
+  id             String    @id @default(uuid())
+  organizationId String
+  locationId     String
+  openedById     String
+  openingFloat   Int
+  countedTotal   Int?
+  expectedTotal  Int?
+  variance       Int?
+  openedAt       DateTime  @default(now())
+  closedAt       DateTime?
+  note           String? @db.Text
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  openedBy     User         @relation(fields: [openedById], references: [id], onDelete: Restrict)
+
+  @@index([locationId, openedAt])
+  @@map("cash_sessions")
+}
+
+// The reconciliation work queue (build guide / 08).
+model ReconciliationItem {
+  id             String               @id @default(uuid())
+  organizationId String
+  kind           String
+  reference      String
+  amount         Int?
+  detail         String @db.Text
+  status         ReconciliationStatus @default(OPEN)
+  resolvedById   String?
+  resolvedAt     DateTime?
+  resolutionNote String? @db.Text
+  createdAt      DateTime             @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@map("reconciliation_items")
+}
+
+// ---------------------------------------------------------------------------
+// Integration control
+// ---------------------------------------------------------------------------
+
+model ProviderConnection {
+  id                String       @id @default(uuid())
+  organizationId    String
+  kind              ProviderKind
+  provider          String
+  // Merchant/account identity; provider events are matched against this before
+  // they are allowed to touch tenant records.
+  externalAccountId String?
+  displayName       String?
+  isLive            Boolean      @default(false)
+  isEnabled         Boolean      @default(false)
+  // Secrets belong in a secret store. Only a reference is kept here.
+  secretRef         String?
+  capabilities      Json?
+  connectedAt       DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, kind, provider])
+  @@map("provider_connections")
+}
+
+// Durable receipt of a provider event, deduplicated before acknowledgement.
+model WebhookInbox {
+  id                String        @id @default(uuid())
+  organizationId    String?
+  provider          String
+  externalAccountId String?
+  eventId           String
+  eventType         String
+  status            WebhookStatus @default(RECEIVED)
+  signatureValid    Boolean       @default(false)
+  payload           Json
+  error             String? @db.Text
+  receivedAt        DateTime      @default(now())
+  processedAt       DateTime?
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, externalAccountId, eventId])
+  @@index([status, receivedAt])
+  @@map("webhook_inbox")
+}
+
+// Written inside the same transaction as the business change, then dispatched
+// by the worker. This is what makes notifications and integrations exactly-once.
+model OutboxEvent {
+  id             String       @id @default(uuid())
+  organizationId String
+  eventType      String
+  payload        Json
+  status         OutboxStatus @default(PENDING)
+  attempts       Int          @default(0)
+  lastError      String? @db.Text
+  availableAt    DateTime     @default(now())
+  processedAt    DateTime?
+  createdAt      DateTime     @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt])
+  @@map("outbox_events")
+}
+
+model AuditEvent {
+  id             String   @id @default(uuid())
+  organizationId String
+  actorId        String?
+  action         String
+  resourceType   String
+  resourceId     String
+  correlationId  String?
+  reason         String? @db.Text
+  metadata       Json?
+  ip             String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor        User?        @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([resourceType, resourceId])
+  @@map("audit_events")
+}
+
+// Simple per-organization document counters so numbers do not collide.
+model NumberSequence {
+  id             String @id @default(uuid())
+  organizationId String
+  kind           String
+  prefix         String
+  nextValue      Int    @default(1)
+
+  @@unique([organizationId, kind])
+  @@map("number_sequences")
+}

@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "outDir": "dist",
+    // rootDir is src so the build emits dist/index.js, which keeps env.ts the
+    // same three directories below the repository root in dev and in prod.
+    "rootDir": "src",
+    "strict": true,
+    // The release zip ships a prebuilt dist/ as well as src/. If a server-side
+    // build cannot resolve the @types packages (npm install --omit=dev drops
+    // them), tsc must fail loudly and write nothing rather than emitting
+    // half-checked JavaScript over the shipped build.
+    "noEmitOnError": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
+}

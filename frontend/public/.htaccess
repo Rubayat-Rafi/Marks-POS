@@ -1,0 +1,79 @@
+# Auto Shop Web App - Apache config for the SPA in public_html.
+#
+# Vite copies everything in public/ to dist/, so this ships with the build.
+#
+# Two jobs:
+#   1. Hand /api/... to the Node API so the browser sees one origin. Same
+#      origin means the session cookie is first-party and there is no CORS
+#      preflight on any request.
+#   2. Serve index.html for client-side routes, but never for a real file.
+
+AddType application/javascript .js
+AddType text/css .css
+AddType image/svg+xml .svg
+AddType application/json .json
+
+<IfModule mod_headers.c>
+  # Hashed asset filenames change on every build, so they can be cached hard.
+  <FilesMatch "\.(js|css|woff2?|svg|png|jpg|jpeg|webp)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  # index.html must not be cached or a deploy leaves stale asset references.
+  <FilesMatch "^index\.html$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # ---------------------------------------------------------------------
+  # 1. API: direct cross-origin calls (split-domain deployment)
+  # ---------------------------------------------------------------------
+  # The SPA calls https://auto.chromopay.com/api/v1 directly (VITE_API_URL
+  # baked in at build time). This host has no mod_proxy, so a [P]
+  # reverse-proxy rule here 503s every /api call. There is therefore NO
+  # proxy rule: /api on this host intentionally falls through to the SPA
+  # fallback below (harmless — the app never calls same-origin /api).
+  #
+  # Server side this needs (already set in backend env):
+  #   CORS_ORIGIN="https://marks.chromopay.com"
+  #   COOKIE_SAMESITE=none  and  COOKIE_SECURE=true
+
+  # ---------------------------------------------------------------------
+  # 1b. Static assets bypass (must come before the SPA fallback)
+  # ---------------------------------------------------------------------
+  # Never rewrite real bundled files. If /assets/* ever falls through to
+  # index.html, browsers reject it with a MIME-type error (JS served as
+  # text/html) and the page renders blank. This rule stops that.
+  RewriteRule ^assets/ - [L]
+
+  # ---------------------------------------------------------------------
+  # 2. SPA history fallback
+  # ---------------------------------------------------------------------
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteCond %{REQUEST_FILENAME} !-l
+  RewriteRule . /index.html [L]
+</IfModule>
+
+# -------------------------------------------------------------------------
+# Split-domain note
+# -------------------------------------------------------------------------
+# The SPA calls the API cross-origin (https://auto.chromopay.com, baked in
+# from VITE_API_URL at build time) because this host has no mod_proxy for a
+# same-origin [P] rule. The backend (env on the API host) therefore uses:
+#
+#   CORS_ORIGIN="https://marks.chromopay.com"
+#   COOKIE_SAMESITE=none  and  COOKIE_SECURE=true
+#
+# The /assets/ bypass in section 1b exists because a static file that falls
+# through to index.html comes back as text/html and browsers refuse to run
+# it (the MIME-type error). If you see that error again, the assets folder
+# is missing on the server or .htaccess did not upload (File Manager hides
+# dotfiles until "Show Hidden Files" is enabled).

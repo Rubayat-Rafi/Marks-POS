@@ -1,0 +1,54 @@
+{
+  "name": "autoshop-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "dev:worker": "tsx watch src/worker/index.ts",
+    "build": "prisma generate && (tsc -p tsconfig.json || echo 'server build skipped: using prebuilt dist/ shipped in the release zip')",
+    "postinstall": "prisma generate",
+    "start": "node dist/index.js",
+    "start:worker": "node dist/worker/index.js",
+    "worker:once": "node dist/worker/index.js --once",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "node scripts/with-env.mjs prisma migrate dev",
+    "prisma:deploy": "node scripts/with-env.mjs prisma migrate deploy",
+    "prisma:push": "node scripts/with-env.mjs prisma db push",
+    "prisma:reset": "node scripts/with-env.mjs prisma migrate reset --force",
+    "prisma:studio": "node scripts/with-env.mjs prisma studio",
+    "prisma:sql": "node scripts/generate-sql.mjs",
+    "seed": "node scripts/with-env.mjs tsx prisma/seed.ts",
+    "seed:admin": "node scripts/with-env.mjs tsx prisma/seed-admin.ts",
+    "test": "vitest run"
+  },
+  "prisma": {
+    "seed": "node scripts/with-env.mjs tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/morgan": "^1.9.9",
+    "@types/node": "^22.10.2",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "prisma": "^5.22.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  },
+  "engines": { "node": ">=20.11" }
+}

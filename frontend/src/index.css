@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-slate-50 font-sans text-ink antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display tracking-tight;
+  }
+  /* Accessible focus ring everywhere, not only on the styled button. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-500 ring-offset-1;
+  }
+  /* Numeric columns line up when they are tabular. */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+  /* 16px inputs stop iOS Safari zooming the page when a field is tapped. */
+  @media (max-width: 640px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+}
+
+@layer utilities {
+  /*
+   * A horizontally-scrolling region (the work board, a wide table) that is
+   * always obviously scrollable: a visible themed scrollbar rather than an
+   * OS overlay bar that hides itself, plus momentum scrolling on touch and
+   * snap points so a swipe lands on a whole lane/column instead of
+   * mid-column.
+   */
+  .scroll-x-visible {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+    scrollbar-color: #94a3b8 #e2e8f0;
+  }
+  .scroll-x-visible::-webkit-scrollbar {
+    height: 10px;
+  }
+  .scroll-x-visible::-webkit-scrollbar-track {
+    background: #e2e8f0;
+    border-radius: 999px;
+  }
+  .scroll-x-visible::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 999px;
+  }
+  .scroll-x-visible::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+  }
+  .scroll-snap-item {
+    scroll-snap-align: start;
+  }
+  /* A row that can be swiped sideways but still scrolls the page vertically. */
+  .touch-pan-y {
+    touch-action: pan-y;
+  }
+  /* Room for the phone's home bar under the bottom navigation. */
+  .pb-safe {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/*
+ * Printing. Everything around the receipt disappears (print:hidden on the
+ * app chrome). The receipt page sets the paper size itself: letter, or an
+ * 80mm thermal roll.
+ */
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+}

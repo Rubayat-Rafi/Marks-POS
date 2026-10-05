@@ -1,0 +1,44 @@
+import { Router } from "express";
+import { authRouter } from "../modules/auth/auth.routes.js";
+import { customerRouter } from "../modules/customer/customer.routes.js";
+import { vehicleRouter } from "../modules/vehicle/vehicle.routes.js";
+import { appointmentRouter } from "../modules/appointment/appointment.routes.js";
+import { estimateRouter } from "../modules/estimate/estimate.routes.js";
+import { approvalRouter } from "../modules/approval/approval.routes.js";
+import { repairOrderRouter } from "../modules/repair-order/repairOrder.routes.js";
+import { invoiceRouter } from "../modules/invoice/invoice.routes.js";
+import { paymentRouter } from "../modules/payment/payment.routes.js";
+import { financeRouter } from "../modules/finance/finance.routes.js";
+import { reportRouter } from "../modules/report/report.routes.js";
+import { settingRouter } from "../modules/setting/setting.routes.js";
+import { mediaRouter } from "../modules/media/media.routes.js";
+import { timeClockRouter } from "../modules/time-clock/timeClock.routes.js";
+import { inventoryRouter } from "../modules/inventory/inventory.routes.js";
+import { quickSaleRouter } from "../modules/quick-sale/quickSale.routes.js";
+import { bookingRouter } from "../modules/booking/booking.routes.js";
+import { publicRouter } from "../modules/public/public.routes.js";
+import { webhookRouter } from "../modules/webhook/webhook.routes.js";
+
+export const router = Router();
+
+router.use("/auth", authRouter);
+router.use("/customers", customerRouter);
+router.use("/vehicles", vehicleRouter);
+router.use("/appointments", appointmentRouter);
+router.use("/estimates", estimateRouter);
+router.use("/approvals", approvalRouter);
+router.use("/repair-orders", repairOrderRouter);
+router.use("/invoices", invoiceRouter);
+router.use("/payments", paymentRouter);
+router.use("/finance", financeRouter);
+router.use("/reports", reportRouter);
+router.use("/settings", settingRouter);
+router.use("/files", mediaRouter);
+router.use("/time-clock", timeClockRouter);
+router.use("/inventory", inventoryRouter);
+router.use("/quick-sales", quickSaleRouter);
+router.use("/booking-requests", bookingRouter);
+router.use("/public", publicRouter);
+router.use("/webhooks", webhookRouter);
+
+export default router;
