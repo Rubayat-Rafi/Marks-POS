@@ -283,7 +283,17 @@ export type DashboardData = {
   /** null when the role cannot see invoice amounts. */
   invoicedToday: { count: number; total: number } | null;
   lowStockCount: number | null;
+  lowStockCountByShop?: {
+    total: number;
+    tireShop: number;
+    mufflersShop: number;
+  } | null;
   newBookingRequests: number | null;
+  newBookingRequestsByShop?: {
+    total: number;
+    tireShop: number;
+    mufflersShop: number;
+  } | null;
   myOpenTasks: Array<{
     id: string;
     description: string;

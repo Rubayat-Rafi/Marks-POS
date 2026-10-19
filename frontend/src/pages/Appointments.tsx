@@ -19,6 +19,8 @@ import {
 } from "../components/ui";
 import { Icon } from "../components/Icon";
 import { classifyTextDepartment, type ShopDepartment } from "../lib/shopDepartment";
+import { SHOP_PALETTES } from "../lib/shopColors";
+import { DepartmentBadge } from "../components/DepartmentBadge";
 import type { BookingRequest, Customer, RepairOrder, Vehicle } from "../lib/types";
 
 type Appointment = {
@@ -164,42 +166,40 @@ export function AppointmentsPage() {
         </div>
 
         {/* Shop Switcher Pill */}
-        <div className="flex items-center rounded-xl bg-slate-100 p-1 border border-slate-200 shadow-2xs">
-          <span className="px-2 text-xs font-bold text-slate-500">Shop:</span>
+        <div className="flex items-center gap-1.5 rounded-2xl bg-white p-1.5 shadow-sm border border-slate-200">
+          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider px-2">Shop:</span>
           <button
             type="button"
             onClick={() => setShopFilter("ALL")}
-            className={`rounded-lg px-3 py-1 text-xs font-bold transition ${
+            className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
               shopFilter === "ALL"
-                ? "bg-white text-slate-900 shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
+                ? SHOP_PALETTES.ALL.activeTabClass
+                : SHOP_PALETTES.ALL.inactiveTabClass
             }`}
           >
-            All Shops
+            <Icon name="store" className="h-3.5 w-3.5" /> All Shops
           </button>
           <button
             type="button"
             onClick={() => setShopFilter("TIRE")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-bold transition ${
+            className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
               shopFilter === "TIRE"
-                ? "bg-amber-600 text-white shadow-xs"
-                : "text-amber-800 hover:bg-amber-50"
+                ? SHOP_PALETTES.TIRE.activeTabClass
+                : SHOP_PALETTES.TIRE.inactiveTabClass
             }`}
           >
-            <span>🛞</span>
-            <span>Tires Shop</span>
+            <Icon name="tire" className="h-3.5 w-3.5" /> Tires Shop
           </button>
           <button
             type="button"
             onClick={() => setShopFilter("MUFFLER")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-bold transition ${
+            className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
               shopFilter === "MUFFLER"
-                ? "bg-blue-600 text-white shadow-xs"
-                : "text-blue-800 hover:bg-blue-50"
+                ? SHOP_PALETTES.MUFFLER.activeTabClass
+                : SHOP_PALETTES.MUFFLER.inactiveTabClass
             }`}
           >
-            <span>🔧</span>
-            <span>Mufflers Shop</span>
+            <Icon name="pipe" className="h-3.5 w-3.5" /> Mufflers Shop
           </button>
         </div>
       </div>
@@ -236,15 +236,7 @@ export function AppointmentsPage() {
                   <div className="min-w-0 space-y-1">
                     <div className="flex items-center gap-2">
                       <h3 className="font-display text-base font-bold text-ink">{req.name}</h3>
-                      <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded border ${
-                        reqDept === "TIRE"
-                          ? "bg-amber-100 text-amber-900 border-amber-300"
-                          : reqDept === "MUFFLER"
-                          ? "bg-blue-100 text-blue-900 border-blue-300"
-                          : "bg-slate-100 text-slate-700 border-slate-300"
-                      }`}>
-                        {reqDept === "TIRE" ? "🛞 Tires" : reqDept === "MUFFLER" ? "🔧 Mufflers" : "General"}
-                      </span>
+                      <DepartmentBadge department={reqDept} size="xs" />
                       <StatusBadge status={req.status} />
                     </div>
 
@@ -399,15 +391,7 @@ export function AppointmentsPage() {
                               const dept = classifyTextDepartment(`${appt.concern} ${appt.requestedWork || ""}`);
                               return (
                                 <div className="flex items-center gap-1.5 min-w-0">
-                                  <span className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 text-[9px] font-extrabold uppercase shrink-0 border ${
-                                    dept === "TIRE"
-                                      ? "bg-amber-100 text-amber-900 border-amber-300"
-                                      : dept === "MUFFLER"
-                                      ? "bg-blue-100 text-blue-900 border-blue-300"
-                                      : "bg-slate-100 text-slate-700 border-slate-300"
-                                  }`}>
-                                    {dept === "TIRE" ? "🛞 Tires" : dept === "MUFFLER" ? "🔧 Mufflers" : "General"}
-                                  </span>
+                                  <DepartmentBadge department={dept} size="xs" />
                                   <span className="truncate">{appt.concern}</span>
                                 </div>
                               );

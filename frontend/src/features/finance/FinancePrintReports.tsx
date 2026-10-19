@@ -5,6 +5,7 @@ import { Icon } from "../../components/Icon";
 
 export type ReportType =
   | "PAYMENTS"
+  | "INVOICES"
   | "CASH_CLOSING_OVERALL"
   | "CASH_CLOSING_TIRE"
   | "CASH_CLOSING_MUFFLER"
@@ -43,8 +44,8 @@ export function PrintReportModal({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-2 sm:p-4 backdrop-blur-xs">
-      <div className="relative flex max-h-[96vh] w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl print:max-h-none print:w-full print:rounded-none print:shadow-none">
+    <div className="finance-print-modal-overlay fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-2 sm:p-4 backdrop-blur-xs print:static print:z-auto print:block print:bg-white print:p-0 print:m-0 print:overflow-visible">
+      <div className="finance-print-modal-card relative flex max-h-[96vh] w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl print:static print:max-h-none print:w-full print:max-w-none print:rounded-none print:shadow-none print:border-none print:m-0 print:p-0 print:overflow-visible">
         {/* Screen Action Bar (hidden in print) */}
         <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-5 py-3 print:hidden">
           <div className="flex items-center gap-2">
@@ -53,35 +54,94 @@ export function PrintReportModal({
             </span>
             <div>
               <h2 className="text-base font-bold text-slate-900">{config.title}</h2>
-              <p className="text-xs text-slate-500">Printable official financial report</p>
+              <p className="text-xs text-slate-500">Official printable report (save as PDF from destination)</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="secondary" onClick={onClose}>
               Close
             </Button>
-            <Button onClick={handlePrint} className="gap-1.5 shadow-sm">
-              <Icon name="printer" className="h-4 w-4" /> Print Document
+            <Button onClick={handlePrint} className="gap-1.5 shadow-sm font-bold bg-teal-700 hover:bg-teal-800 text-white">
+              <Icon name="printer" className="h-4 w-4" /> Print / Save as PDF
             </Button>
           </div>
         </div>
 
         {/* Printable Paper Document Container */}
-        <div className="flex-1 overflow-y-auto p-6 font-sans text-ink print:overflow-visible print:p-0">
+        <div className="finance-print-modal-scroll flex-1 overflow-y-auto p-6 font-sans text-ink print:static print:overflow-visible print:p-0 print:m-0">
           <style>{`
             @media print {
-              body * { visibility: hidden; }
-              #printable-report-content, #printable-report-content * { visibility: visible; }
-              #printable-report-content {
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
-                margin: 0;
-                padding: 10mm;
-                background: #fff;
+              html, body {
+                background: #ffffff !important;
+                color: #000000 !important;
+                height: auto !important;
+                min-height: 100% !important;
+                overflow: visible !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
               }
-              @page { size: letter; margin: 10mm; }
+              aside, header, nav, .print\\:hidden {
+                display: none !important;
+              }
+              main {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+              }
+              .finance-print-modal-overlay {
+                position: static !important;
+                display: block !important;
+                background: #ffffff !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                overflow: visible !important;
+                width: 100% !important;
+                height: auto !important;
+              }
+              .finance-print-modal-card {
+                position: static !important;
+                display: block !important;
+                max-width: 100% !important;
+                max-height: none !important;
+                height: auto !important;
+                border: none !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                overflow: visible !important;
+                background: #ffffff !important;
+              }
+              .finance-print-modal-scroll {
+                overflow: visible !important;
+                height: auto !important;
+                max-height: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                background: #ffffff !important;
+              }
+              #printable-report-content {
+                position: static !important;
+                display: block !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #ffffff !important;
+              }
+              @page {
+                size: letter portrait;
+                margin: 12mm 10mm 12mm 10mm;
+              }
+              tr {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+              }
+              table {
+                page-break-inside: auto !important;
+                break-inside: auto !important;
+              }
             }
           `}</style>
 
@@ -94,7 +154,7 @@ export function PrintReportModal({
                     MARK&apos;S TIRE SHOP &amp; MUFFLER
                   </h1>
                   <p className="text-xs text-slate-600">5229 Saint Claude Ave · New Orleans, LA 70117 · (504) 354-9396</p>
-                  <p className="text-xs text-slate-500">Official Operational &amp; Financial Reporting</p>
+                  <p className="text-xs text-slate-500 font-medium">Official Operational &amp; Financial Reporting</p>
                 </div>
                 <div className="text-right">
                   <span className="inline-block rounded-md border border-slate-800 bg-slate-900 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white">
@@ -104,12 +164,18 @@ export function PrintReportModal({
                   {config.dateRange?.date && (
                     <p className="text-xs font-semibold text-slate-800">Date: {dateOnly(config.dateRange.date)}</p>
                   )}
+                  {config.dateRange?.from && config.dateRange?.to && (
+                    <p className="text-xs font-semibold text-slate-800">
+                      Period: {dateOnly(config.dateRange.from)} to {dateOnly(config.dateRange.to)}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
 
             {/* Document Body by Type */}
             {config.type === "PAYMENTS" && <PaymentsReportBody payments={config.data} />}
+            {config.type === "INVOICES" && <InvoicesReportBody invoices={config.data} />}
             {config.type.startsWith("CASH_CLOSING") && (
               <CashClosingReportBody
                 summary={config.data}
@@ -545,7 +611,9 @@ function DailySalesReportBody({
   const net = target?.totals?.net ?? 0;
   const tax = target?.totals?.tax ?? 0;
   const gross = target?.totals?.gross ?? 0;
-  const count = target?.totals?.invoiceCount ?? target?.totals?.count ?? 0;
+  const count = target?.totals?.invoiceCount ?? target?.totals?.count ?? target?.invoices?.length ?? 0;
+  const cashCollected = target?.totals?.cashCollected ?? null;
+  const paymentsCount = target?.totals?.paymentsCount ?? 0;
   const items = target?.items || [];
   const invoices = target?.invoices || [];
 
@@ -568,7 +636,14 @@ function DailySalesReportBody({
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className={`grid grid-cols-2 gap-3 ${cashCollected !== null ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
+        {cashCollected !== null && (
+          <div className="rounded-xl border border-slate-200 bg-emerald-50/40 p-3 shadow-xs">
+            <p className="text-[11px] font-bold uppercase text-emerald-800">Cash Collected</p>
+            <p className="text-xl font-black font-mono text-emerald-900">{money(cashCollected)}</p>
+            <p className="text-[10px] text-emerald-700 font-semibold">{paymentsCount} payments (Cash Basis)</p>
+          </div>
+        )}
         <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
           <p className="text-[11px] font-bold uppercase text-slate-500">Net Sales</p>
           <p className="text-xl font-black font-mono text-slate-900">{money(net)}</p>
@@ -580,7 +655,7 @@ function DailySalesReportBody({
           <p className="text-[10px] text-slate-400">Liability tracked</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
-          <p className="text-[11px] font-bold uppercase text-slate-500">Gross Sales</p>
+          <p className="text-[11px] font-bold uppercase text-slate-500">Gross Invoiced</p>
           <p className="text-xl font-black font-mono text-teal-800">{money(gross)}</p>
           <p className="text-[10px] text-slate-400">Total invoiced</p>
         </div>
@@ -590,6 +665,67 @@ function DailySalesReportBody({
           <p className="text-[10px] text-slate-400">Transactions</p>
         </div>
       </div>
+
+      {/* Division Sub-Breakdown for Consolidated Report */}
+      {dept === "ALL" && sales?.tireShop && sales?.mufflersShop && (
+        <div className="grid grid-cols-2 gap-3 pt-1">
+          {/* Tires Division Mini Box */}
+          <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3">
+            <div className="flex items-center justify-between border-b border-blue-200 pb-1 mb-2">
+              <span className="font-bold text-xs uppercase tracking-wider text-blue-950 flex items-center gap-1">
+                <span>🛞</span> Tires Shop Division
+              </span>
+              <span className="text-[11px] font-bold text-blue-800">
+                {sales.tireShop.totals?.invoiceCount ?? sales.tireShop.invoices?.length ?? 0} Invoices
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div>
+                <span className="text-[10px] text-slate-500 block">Cash Collected</span>
+                <span className="font-bold font-mono text-emerald-800">
+                  {sales.tireShop.totals?.cashCollected !== null ? money(sales.tireShop.totals?.cashCollected) : "—"}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 block">Gross Invoiced</span>
+                <span className="font-bold font-mono text-slate-900">{money(sales.tireShop.totals?.gross ?? 0)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 block">Net Sales</span>
+                <span className="font-bold font-mono text-slate-700">{money(sales.tireShop.totals?.net ?? 0)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Mufflers Division Mini Box */}
+          <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+            <div className="flex items-center justify-between border-b border-amber-200 pb-1 mb-2">
+              <span className="font-bold text-xs uppercase tracking-wider text-amber-950 flex items-center gap-1">
+                <span>🔧</span> Mufflers Shop Division
+              </span>
+              <span className="text-[11px] font-bold text-amber-800">
+                {sales.mufflersShop.totals?.invoiceCount ?? sales.mufflersShop.invoices?.length ?? 0} Invoices
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div>
+                <span className="text-[10px] text-slate-500 block">Cash Collected</span>
+                <span className="font-bold font-mono text-emerald-800">
+                  {sales.mufflersShop.totals?.cashCollected !== null ? money(sales.mufflersShop.totals?.cashCollected) : "—"}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 block">Gross Invoiced</span>
+                <span className="font-bold font-mono text-slate-900">{money(sales.mufflersShop.totals?.gross ?? 0)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 block">Net Sales</span>
+                <span className="font-bold font-mono text-slate-700">{money(sales.mufflersShop.totals?.net ?? 0)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Top Services & Items Sold */}
       {items.length > 0 && (
@@ -623,12 +759,13 @@ function DailySalesReportBody({
       {/* Invoices List */}
       {invoices.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">Invoices &amp; Receipts</h3>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">Invoices &amp; Receipts ({invoices.length})</h3>
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600">
                 <th className="py-1.5 px-2">Invoice #</th>
                 <th className="py-1.5 px-2">Customer</th>
+                <th className="py-1.5 px-2">Items &amp; Services</th>
                 <th className="py-1.5 px-2">Issued At</th>
                 <th className="py-1.5 px-2 text-right">Net</th>
                 <th className="py-1.5 px-2 text-right">Tax</th>
@@ -640,6 +777,9 @@ function DailySalesReportBody({
                 <tr key={inv.id}>
                   <td className="py-1.5 px-2 font-mono font-bold text-slate-900">{inv.number}</td>
                   <td className="py-1.5 px-2 text-slate-800">{inv.customer}</td>
+                  <td className="py-1.5 px-2 text-slate-600 max-w-[200px] truncate text-[11px]">
+                    {inv.lines?.map((l: any) => `${l.quantity}x ${l.description}`).join(", ") || "—"}
+                  </td>
                   <td className="py-1.5 px-2 text-slate-500">{dateTime(inv.issuedAt)}</td>
                   <td className="py-1.5 px-2 text-right font-mono text-slate-700">{money(inv.net)}</td>
                   <td className="py-1.5 px-2 text-right font-mono text-slate-600">{money(inv.tax)}</td>
@@ -650,6 +790,85 @@ function DailySalesReportBody({
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 7. Invoices & Receivables Register Report
+// ---------------------------------------------------------------------------
+function InvoicesReportBody({ invoices }: { invoices: any[] }) {
+  const totalInvoiced = invoices.reduce((s, inv) => s + (inv.total || 0), 0);
+  const totalPaid = invoices.reduce((s, inv) => s + (inv.amountPaid || 0), 0);
+  const totalBalance = invoices.reduce((s, inv) => s + Math.max(0, (inv.total || 0) - (inv.amountPaid || 0) - (inv.amountCredited || 0)), 0);
+
+  return (
+    <div className="space-y-4">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-semibold text-slate-500 uppercase">Total Invoiced</p>
+          <p className="text-xl font-bold font-mono text-slate-900">{money(totalInvoiced)}</p>
+        </div>
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+          <p className="text-xs font-semibold text-emerald-800 uppercase">Total Paid / Settled</p>
+          <p className="text-xl font-bold font-mono text-emerald-950">{money(totalPaid)}</p>
+        </div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-semibold text-amber-800 uppercase">Outstanding Balance</p>
+          <p className="text-xl font-bold font-mono text-amber-900">{money(totalBalance)}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-semibold text-slate-500 uppercase">Invoices Count</p>
+          <p className="text-xl font-bold font-mono text-slate-900">{invoices.length}</p>
+        </div>
+      </div>
+
+      <table className="w-full border-collapse text-left text-xs">
+        <thead>
+          <tr className="border-b-2 border-slate-300 bg-slate-100 font-bold uppercase text-slate-700">
+            <th className="py-2 px-2">Invoice #</th>
+            <th className="py-2 px-2">Customer</th>
+            <th className="py-2 px-2">Status</th>
+            <th className="py-2 px-2">Issued Date</th>
+            <th className="py-2 px-2 text-right">Total</th>
+            <th className="py-2 px-2 text-right">Paid</th>
+            <th className="py-2 px-2 text-right">Balance Due</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-200">
+          {invoices.map((inv: any) => {
+            const bal = Math.max(0, (inv.total || 0) - (inv.amountPaid || 0) - (inv.amountCredited || 0));
+            const custName = inv.customer
+              ? typeof inv.customer === "string"
+                ? inv.customer
+                : `${inv.customer.firstName ?? ""} ${inv.customer.lastName ?? ""}`.trim() || inv.customer.companyName || "Walk-in"
+              : "Walk-in";
+
+            return (
+              <tr key={inv.id || inv.number}>
+                <td className="py-2 px-2 font-mono font-bold text-slate-900">{inv.number}</td>
+                <td className="py-2 px-2 text-slate-800">{custName}</td>
+                <td className="py-2 px-2">
+                  <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                    inv.status === "PAID"
+                      ? "bg-emerald-100 text-emerald-800"
+                      : inv.status === "PARTLY_PAID"
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-slate-100 text-slate-700"
+                  }`}>
+                    {inv.status || "PAID"}
+                  </span>
+                </td>
+                <td className="py-2 px-2 text-slate-600">{dateOnly(inv.issuedAt)}</td>
+                <td className="py-2 px-2 text-right font-mono font-semibold text-slate-900">{money(inv.total)}</td>
+                <td className="py-2 px-2 text-right font-mono text-emerald-800">{money(inv.amountPaid ?? inv.total)}</td>
+                <td className="py-2 px-2 text-right font-mono font-bold text-slate-900">{money(bal)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

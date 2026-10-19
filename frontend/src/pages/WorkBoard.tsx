@@ -9,6 +9,7 @@ import { Button, DataState, ErrorBanner, Notice } from "../components/ui";
 import { Icon } from "../components/Icon";
 import { WalkInModal } from "../components/WalkInModal";
 import { classifyTextDepartment, type ShopDepartment } from "../lib/shopDepartment";
+import { SHOP_PALETTES } from "../lib/shopColors";
 import type { RepairOrder, RepairOrderStatus } from "../lib/types";
 
 type Board = { lanes: Array<{ status: RepairOrderStatus; orders: RepairOrder[] }> };
@@ -225,27 +226,41 @@ export function WorkBoardPage() {
 
   const conflict = advance.error instanceof ApiClientError && advance.error.isConflict;
 
-  // Compute shop-wide metrics across all lanes
+  // All orders across all lanes (raw, unfiltered)
   const allOrders = useMemo(
     () => board.data?.lanes.flatMap((l) => l.orders) ?? [],
     [board.data?.lanes]
   );
 
+  // Orders filtered to the active shop division — drives both KPI tiles and lane cards
+  const shopFilteredAllOrders = useMemo(() => {
+    if (shopFilter === "ALL") return allOrders;
+    return allOrders.filter((ro) => {
+      const dept = classifyTextDepartment(
+        `${ro.concern || ""} ${ro.tasks?.map((t) => t.description).join(" ") || ""}`,
+        ro.number || ro.id,
+      );
+      return dept === shopFilter;
+    });
+  }, [allOrders, shopFilter]);
+
   const now = Date.now();
 
+  // KPI metrics — always reflect the ACTIVE shop filter
   const metrics = useMemo(() => {
-    const totalActive = allOrders.length;
-    const inProgress = allOrders.filter((o) => o.status === "IN_PROGRESS").length;
-    const awaitingApproval = allOrders.filter((o) => o.status === "AWAITING_APPROVAL").length;
-    const awaitingParts = allOrders.filter((o) => o.status === "AWAITING_PARTS").length;
+    const orders = shopFilteredAllOrders;
+    const totalActive = orders.length;
+    const inProgress = orders.filter((o) => o.status === "IN_PROGRESS").length;
+    const awaitingApproval = orders.filter((o) => o.status === "AWAITING_APPROVAL").length;
+    const awaitingParts = orders.filter((o) => o.status === "AWAITING_PARTS").length;
     const totalWaiting = awaitingApproval + awaitingParts;
-    const ready = allOrders.filter((o) => o.status === "READY").length;
+    const ready = orders.filter((o) => o.status === "READY").length;
 
-    const overdue = allOrders.filter(
+    const overdue = orders.filter(
       (ro) => ro.promisedAt && new Date(ro.promisedAt).getTime() < now
     ).length;
 
-    const todayPromise = allOrders.filter((ro) => {
+    const todayPromise = orders.filter((ro) => {
       if (!ro.promisedAt) return false;
       const t = new Date(ro.promisedAt);
       const n = new Date();
@@ -256,7 +271,7 @@ export function WorkBoardPage() {
       );
     }).length;
 
-    const withOpenTasks = allOrders.filter(
+    const withOpenTasks = orders.filter(
       (ro) => ro.tasks && ro.tasks.some((t) => t.status !== "DONE")
     ).length;
 
@@ -271,7 +286,7 @@ export function WorkBoardPage() {
       todayPromise,
       withOpenTasks,
     };
-  }, [allOrders, now]);
+  }, [shopFilteredAllOrders, now]);
 
   // Apply real-time search & filters
   const filteredLanes = useMemo(() => {
@@ -538,6 +553,32 @@ export function WorkBoardPage() {
         </button>
       </section>
 
+      {/* Active Shop Banner — visible only when a specific shop is selected */}
+      {shopFilter !== "ALL" && (
+        <div className={`mb-4 flex items-center gap-3 rounded-xl border px-4 py-3 ${SHOP_PALETTES[shopFilter].bannerClass}`}>
+          <Icon
+            name={shopFilter === "TIRE" ? "tire" : "pipe"}
+            className={`h-4 w-4 shrink-0 ${SHOP_PALETTES[shopFilter].textAccentClass}`}
+          />
+          <div className="flex-1 min-w-0">
+            <span className="font-bold text-sm">
+              {shopFilter === "TIRE" ? "Tires Shop" : "Mufflers Shop"}
+            </span>
+            <span className="ml-2 text-xs opacity-75">
+              Showing only {shopFilter === "TIRE" ? "tire service" : "muffler & exhaust"} repair orders
+              {" — "}{metrics.totalActive} active {metrics.totalActive === 1 ? "job" : "jobs"}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleShopFilterChange("ALL")}
+            className="shrink-0 rounded-lg border border-current/20 bg-white/40 px-2.5 py-1 text-xs font-bold opacity-80 hover:opacity-100 transition"
+          >
+            Show all shops
+          </button>
+        </div>
+      )}
+
       {/* Search, Filter Tabs & Lane Jump Toolbar */}
       <section className="mb-4 rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -567,41 +608,39 @@ export function WorkBoardPage() {
           {/* Quick Filter Chips & Shop Division Switcher */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Shop Switcher Pill */}
-            <div className="flex items-center rounded-lg bg-slate-100 p-0.5 border border-slate-200">
+            <div className="flex items-center gap-1 rounded-2xl bg-white p-1 border border-slate-200 shadow-sm">
               <button
                 type="button"
                 onClick={() => handleShopFilterChange("ALL")}
-                className={`rounded-md px-2.5 py-1 text-xs font-bold transition ${
+                className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
                   shopFilter === "ALL"
-                    ? "bg-white text-slate-900 shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
+                    ? SHOP_PALETTES.ALL.activeTabClass
+                    : SHOP_PALETTES.ALL.inactiveTabClass
                 }`}
               >
-                All Shops
+                <Icon name="store" className="h-3.5 w-3.5" /> All Shops
               </button>
               <button
                 type="button"
                 onClick={() => handleShopFilterChange("TIRE")}
-                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold transition ${
+                className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
                   shopFilter === "TIRE"
-                    ? "bg-amber-600 text-white shadow-2xs"
-                    : "text-amber-800 hover:bg-amber-100"
+                    ? SHOP_PALETTES.TIRE.activeTabClass
+                    : SHOP_PALETTES.TIRE.inactiveTabClass
                 }`}
               >
-                <span>🛞</span>
-                <span>Tires</span>
+                <Icon name="tire" className="h-3.5 w-3.5" /> Tires Shop
               </button>
               <button
                 type="button"
                 onClick={() => handleShopFilterChange("MUFFLER")}
-                className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold transition ${
+                className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
                   shopFilter === "MUFFLER"
-                    ? "bg-blue-600 text-white shadow-2xs"
-                    : "text-blue-800 hover:bg-blue-100"
+                    ? SHOP_PALETTES.MUFFLER.activeTabClass
+                    : SHOP_PALETTES.MUFFLER.inactiveTabClass
                 }`}
               >
-                <span>🔧</span>
-                <span>Mufflers</span>
+                <Icon name="pipe" className="h-3.5 w-3.5" /> Mufflers Shop
               </button>
             </div>
 
@@ -893,17 +932,13 @@ export function WorkBoardPage() {
                                 `${ro.concern || ""} ${ro.tasks?.map((t) => t.description).join(" ") || ""}`,
                                 ro.number || ro.id,
                               );
-                              return (
-                                <span className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 text-[9px] font-extrabold uppercase shrink-0 border ${
-                                  dept === "TIRE"
-                                    ? "bg-amber-100 text-amber-900 border-amber-300"
-                                    : dept === "MUFFLER"
-                                    ? "bg-blue-100 text-blue-900 border-blue-300"
-                                    : "bg-slate-100 text-slate-700 border-slate-300"
-                                }`}>
-                                  {dept === "TIRE" ? "🛞 Tires" : dept === "MUFFLER" ? "🔧 Mufflers" : "General"}
+                              const palette = SHOP_PALETTES[dept === "TIRE" ? "TIRE" : dept === "MUFFLER" ? "MUFFLER" : "ALL"];
+                              return dept === "TIRE" || dept === "MUFFLER" ? (
+                                <span className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 text-[9px] font-extrabold uppercase shrink-0 border ${palette.badgeClass}`}>
+                                  <Icon name={dept === "TIRE" ? "tire" : "pipe"} className="h-2.5 w-2.5" />
+                                  {dept === "TIRE" ? "Tires" : "Mufflers"}
                                 </span>
-                              );
+                              ) : null;
                             })()}
                           </div>
 

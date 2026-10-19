@@ -6,7 +6,7 @@ import { can } from "../../middlewares/rbac.middleware.js";
 import { decimalToNumber } from "../../lib/money.js";
 import { grossMarginPct } from "../../domain/pricing.js";
 import { inStockCounts, isLowStock } from "../../domain/inventory.js";
-import { dayBounds } from "../../lib/time.js";
+import { dayBounds, rangeBounds } from "../../lib/time.js";
 import { classifyLineDepartment, classifyTextDepartment } from "../../domain/shopDepartment.js";
 
 
@@ -21,10 +21,15 @@ async function lowStockCount(organizationId: string): Promise<number> {
   return products.filter((p) => isLowStock(counts.get(p.id) ?? 0, p.reorderPoint)).length;
 }
 
-function rangeFrom(req: { query: Record<string, unknown> }) {
-  const to = queryDate(req.query.to, "to") ?? new Date();
-  const from = queryDate(req.query.from, "from") ?? new Date(to.getTime() - 30 * 86_400_000);
-  return { from, to };
+async function rangeFrom(req: { query: Record<string, unknown>; locals?: Record<string, unknown> }) {
+  // Look up the org's timezone so presets like "today"/"yesterday" bucket
+  // by the shop's local calendar day, not the server's UTC clock.
+  const ctx = auth(req as Request);
+  const org = await db.organization.findUniqueOrThrow({
+    where: { id: ctx.organizationId },
+    select: { timezone: true },
+  });
+  return rangeBounds(req.query as Record<string, unknown>, org.timezone);
 }
 
 export const getDashboard = async (req: Request, res: Response) => {
@@ -302,12 +307,14 @@ export const getDashboard = async (req: Request, res: Response) => {
 };
 
 export const getDailySales = async (req: Request, res: Response) => {
-  const { from, to } = rangeFrom(req);
+  const ctx = auth(req);
+  const org = await db.organization.findUniqueOrThrow({ where: { id: ctx.organizationId }, select: { timezone: true } });
+  const { from, to } = await rangeFrom(req);
   const invoices = await db.invoice.findMany({
     where: {
       ...tenantScope(req),
       status: { notIn: ["DRAFT", "VOID"] },
-      issuedAt: { gte: from, lte: to },
+      issuedAt: { gte: from, lt: to },
     },
     include: {
       customer: { select: { firstName: true, lastName: true, companyName: true } },
@@ -364,7 +371,14 @@ export const getDailySales = async (req: Request, res: Response) => {
   let mufflerLineCount = 0;
 
   for (const inv of invoices) {
-    const dayKey = inv.issuedAt!.toISOString().slice(0, 10);
+    // Bucket by the shop's local date, not UTC, so "Today" on the dashboard
+    // matches "Today" in the reports page.
+    const dayKey = new Intl.DateTimeFormat("en-CA", {
+      timeZone: org.timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(inv.issuedAt!);
     const customerName = [inv.customer.firstName, inv.customer.lastName].filter(Boolean).join(" ") || inv.customer.companyName || "Walk-in";
 
     // Overall day row
@@ -388,34 +402,7 @@ export const getDailySales = async (req: Request, res: Response) => {
       const dept = classifyLineDepartment(line);
       const qty = decimalToNumber(line.quantity);
 
-      if (dept === "TIRE") {
-        invTireNet += line.lineTotal;
-        invTireTax += line.taxAmount;
-        tireNetTotal += line.lineTotal;
-        tireTaxTotal += line.taxAmount;
-        tireGrossTotal += line.lineTotal + line.taxAmount;
-        tireLineCount += 1;
-
-        invTireLines.push({
-          description: line.description,
-          quantity: qty,
-          unitPrice: line.unitPrice,
-          lineTotal: line.lineTotal,
-          taxAmount: line.taxAmount,
-        });
-
-        const existing = tireItemMap.get(line.description) ?? {
-          description: line.description,
-          quantity: 0,
-          lineTotal: 0,
-          taxAmount: 0,
-          lineType: line.lineType,
-        };
-        existing.quantity += qty;
-        existing.lineTotal += line.lineTotal;
-        existing.taxAmount += line.taxAmount;
-        tireItemMap.set(line.description, existing);
-      } else if (dept === "MUFFLER") {
+      if (dept === "MUFFLER") {
         invMufflerNet += line.lineTotal;
         invMufflerTax += line.taxAmount;
         mufflerNetTotal += line.lineTotal;
@@ -442,6 +429,34 @@ export const getDailySales = async (req: Request, res: Response) => {
         existing.lineTotal += line.lineTotal;
         existing.taxAmount += line.taxAmount;
         mufflerItemMap.set(line.description, existing);
+      } else {
+        // TIRE (all tire lines + general services)
+        invTireNet += line.lineTotal;
+        invTireTax += line.taxAmount;
+        tireNetTotal += line.lineTotal;
+        tireTaxTotal += line.taxAmount;
+        tireGrossTotal += line.lineTotal + line.taxAmount;
+        tireLineCount += 1;
+
+        invTireLines.push({
+          description: line.description,
+          quantity: qty,
+          unitPrice: line.unitPrice,
+          lineTotal: line.lineTotal,
+          taxAmount: line.taxAmount,
+        });
+
+        const existing = tireItemMap.get(line.description) ?? {
+          description: line.description,
+          quantity: 0,
+          lineTotal: 0,
+          taxAmount: 0,
+          lineType: line.lineType,
+        };
+        existing.quantity += qty;
+        existing.lineTotal += line.lineTotal;
+        existing.taxAmount += line.taxAmount;
+        tireItemMap.set(line.description, existing);
       }
     }
 
@@ -486,9 +501,128 @@ export const getDailySales = async (req: Request, res: Response) => {
     }
   }
 
+  // Consolidated all invoices and all items sold
+  const allItemMap = new Map<string, { description: string; quantity: number; lineTotal: number; taxAmount: number; lineType: string }>();
+  for (const inv of invoices) {
+    for (const line of inv.lines) {
+      const qty = decimalToNumber(line.quantity);
+      const existing = allItemMap.get(line.description) ?? {
+        description: line.description,
+        quantity: 0,
+        lineTotal: 0,
+        taxAmount: 0,
+        lineType: line.lineType,
+      };
+      existing.quantity += qty;
+      existing.lineTotal += line.lineTotal;
+      existing.taxAmount += line.taxAmount;
+      allItemMap.set(line.description, existing);
+    }
+  }
+
+  const allInvoices = invoices.map((inv) => {
+    const customerName =
+      [inv.customer.firstName, inv.customer.lastName].filter(Boolean).join(" ") ||
+      inv.customer.companyName ||
+      "Walk-in";
+    const hasMuffler = inv.lines.some((l) => classifyLineDepartment(l) === "MUFFLER");
+    const hasTire = inv.lines.some((l) => classifyLineDepartment(l) !== "MUFFLER");
+    const department: "TIRE" | "MUFFLER" | "BOTH" =
+      hasMuffler && hasTire ? "BOTH" : hasMuffler ? "MUFFLER" : "TIRE";
+
+    return {
+      id: inv.id,
+      number: inv.number,
+      customer: customerName,
+      issuedAt: inv.issuedAt!.toISOString(),
+      net: inv.subtotal - inv.discountTotal,
+      tax: inv.taxTotal,
+      total: inv.total,
+      status: inv.status,
+      department,
+      lines: inv.lines.map((l) => ({
+        description: l.description,
+        quantity: decimalToNumber(l.quantity),
+        unitPrice: l.unitPrice,
+        lineTotal: l.lineTotal,
+        taxAmount: l.taxAmount,
+        lineType: l.lineType,
+        department: classifyLineDepartment(l) === "MUFFLER" ? "MUFFLER" : "TIRE",
+      })),
+    };
+  });
+
+  const seesFinance = can(ctx.role, "finance.read");
+  let totalPaymentsCollected = 0;
+  let tirePaymentsCollected = 0;
+  let mufflerPaymentsCollected = 0;
+  let paymentsCount = 0;
+  let tirePaymentsCount = 0;
+  let mufflerPaymentsCount = 0;
+
+  if (seesFinance) {
+    const detailedPayments = await db.payment.findMany({
+      where: {
+        ...tenantScope(req),
+        receivedAt: { gte: from, lt: to },
+        status: "SUCCEEDED",
+      },
+      include: {
+        allocations: {
+          include: {
+            invoice: {
+              include: {
+                lines: {
+                  include: {
+                    inventoryUnits: {
+                      include: { product: { select: { kind: true } } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    paymentsCount = detailedPayments.length;
+    for (const p of detailedPayments) {
+      totalPaymentsCollected += p.amount;
+      let tireLinesSum = 0;
+      let mufflerLinesSum = 0;
+      for (const alloc of p.allocations) {
+        for (const line of alloc.invoice.lines) {
+          const d = classifyLineDepartment(line);
+          if (d === "MUFFLER") mufflerLinesSum += line.lineTotal + line.taxAmount;
+          else tireLinesSum += line.lineTotal + line.taxAmount;
+        }
+      }
+      const sum = tireLinesSum + mufflerLinesSum;
+      let tireShare = 1;
+      if (sum > 0) {
+        tireShare = tireLinesSum / sum;
+      } else {
+        const ref = (p.reference ?? "").toLowerCase();
+        if (ref.includes("muffler") || ref.includes("exhaust")) tireShare = 0;
+        else tireShare = 1;
+      }
+      const tAmt = Math.round(p.amount * tireShare);
+      const mAmt = p.amount - tAmt;
+      if (tAmt > 0) {
+        tirePaymentsCollected += tAmt;
+        tirePaymentsCount++;
+      }
+      if (mAmt > 0) {
+        mufflerPaymentsCollected += mAmt;
+        mufflerPaymentsCount++;
+      }
+    }
+  }
+
   res.json({
     basis: "invoice issue date",
-    note: "Sales exclude sales tax, which is a liability. This is not cash collected.",
+    note: "Sales exclude sales tax, which is a liability. Cash collected reflects payments received.",
     from,
     to,
     days: [...overallByDay.entries()]
@@ -499,7 +633,11 @@ export const getDailySales = async (req: Request, res: Response) => {
       tax: invoices.reduce((s, i) => s + i.taxTotal, 0),
       gross: invoices.reduce((s, i) => s + i.total, 0),
       count: invoices.length,
+      cashCollected: seesFinance ? totalPaymentsCollected : null,
+      paymentsCount,
     },
+    invoices: allInvoices,
+    items: [...allItemMap.values()].sort((a, b) => b.lineTotal - a.lineTotal),
     tireShop: {
       shopName: "Tire Shop",
       totals: {
@@ -508,6 +646,8 @@ export const getDailySales = async (req: Request, res: Response) => {
         gross: tireGrossTotal,
         invoiceCount: tireInvoices.length,
         lineCount: tireLineCount,
+        cashCollected: seesFinance ? tirePaymentsCollected : null,
+        paymentsCount: tirePaymentsCount,
       },
       days: [...tireByDay.entries()]
         .map(([date, v]) => ({ date, ...v }))
@@ -523,6 +663,8 @@ export const getDailySales = async (req: Request, res: Response) => {
         gross: mufflerGrossTotal,
         invoiceCount: mufflerInvoices.length,
         lineCount: mufflerLineCount,
+        cashCollected: seesFinance ? mufflerPaymentsCollected : null,
+        paymentsCount: mufflerPaymentsCount,
       },
       days: [...mufflerByDay.entries()]
         .map(([date, v]) => ({ date, ...v }))
@@ -535,9 +677,9 @@ export const getDailySales = async (req: Request, res: Response) => {
 
 
 export const getJobMargins = async (req: Request, res: Response) => {
-  const { from, to } = rangeFrom(req);
+  const { from, to } = await rangeFrom(req);
   const orders = await db.repairOrder.findMany({
-    where: { ...tenantScope(req), createdAt: { gte: from, lte: to } },
+    where: { ...tenantScope(req), createdAt: { gte: from, lt: to } },
     include: {
       customer: { select: { firstName: true, lastName: true } },
       vehicle: { select: { year: true, make: true, model: true } },
@@ -592,10 +734,10 @@ export const getJobMargins = async (req: Request, res: Response) => {
 };
 
 export const getTechnicianHours = async (req: Request, res: Response) => {
-  const { from, to } = rangeFrom(req);
+  const { from, to } = await rangeFrom(req);
 
   const entries = await db.timeEntry.findMany({
-    where: { repairOrder: { ...tenantScope(req) }, startedAt: { gte: from, lte: to } },
+    where: { repairOrder: { ...tenantScope(req) }, startedAt: { gte: from, lt: to } },
     include: {
       technician: { select: { id: true, firstName: true, lastName: true } },
       repairOrder: { include: { invoices: { include: { lines: true } } } },
@@ -643,12 +785,22 @@ export const getTechnicianHours = async (req: Request, res: Response) => {
 export const getReconciliationSummary = async (req: Request, res: Response) => {
   const [clearing, awaitingBank, openItems, unknownAttempts] = await Promise.all([
     db.payment.aggregate({
-      where: { ...tenantScope(req), provider: { not: "manual" }, bankConfirmedAt: null },
+      where: {
+        ...tenantScope(req),
+        provider: { not: "manual" },
+        method: { notIn: ["CASH", "CHECK"] },
+        bankConfirmedAt: null,
+      },
       _sum: { amount: true, feeAmount: true },
       _count: true,
     }),
     db.payment.findMany({
-      where: { ...tenantScope(req), provider: { not: "manual" }, bankConfirmedAt: null },
+      where: {
+        ...tenantScope(req),
+        provider: { not: "manual" },
+        method: { notIn: ["CASH", "CHECK"] },
+        bankConfirmedAt: null,
+      },
       orderBy: { receivedAt: "asc" },
       take: 50,
       select: { id: true, amount: true, feeAmount: true, receivedAt: true, provider: true },

@@ -244,6 +244,7 @@ export const listReconciliationItems = async (req: Request, res: Response) => {
     where: {
       ...tenantScope(req),
       provider: { not: "manual" },
+      method: { notIn: ["CASH", "CHECK"] },
       bankConfirmedAt: null,
       status: "SUCCEEDED",
     },
@@ -297,6 +298,9 @@ export const confirmBankPayment = async (req: Request, res: Response) => {
   });
   if (!payment) throw ApiError.notFound("Payment not found.");
   if (payment.bankConfirmedAt) throw ApiError.conflict("Already confirmed.");
+  if (payment.method === "CASH" || payment.method === "CHECK" || payment.provider === "manual") {
+    throw ApiError.badRequest("Cash and check payments are collected at the counter till and do not require card processor payout reconciliation.");
+  }
 
   const net = payment.amount - payment.feeAmount;
   const updated = await db.$transaction(async (tx) => {

@@ -132,7 +132,7 @@ async function createShop(opts: {
           state: "LA",
           postalCode: opts.postalCode ?? "70115",
           phone: opts.phone ?? "(504) 555-0142",
-          bayCount: 5,
+          bayCount: 8,
         },
       },
     },
@@ -324,21 +324,21 @@ async function main() {
       {
         organizationId: primary.org.id,
         name: "Standard",
-        ratePerHour: dollars(145),
-        costPerHour: dollars(42),
+        ratePerHour: dollars(40),
+        costPerHour: dollars(16),
         isDefault: true,
       },
       {
         organizationId: primary.org.id,
         name: "Diagnostic",
-        ratePerHour: dollars(175),
-        costPerHour: dollars(48),
+        ratePerHour: dollars(45),
+        costPerHour: dollars(18),
       },
       {
         organizationId: primary.org.id,
         name: "Fleet",
-        ratePerHour: dollars(120),
-        costPerHour: dollars(42),
+        ratePerHour: dollars(35),
+        costPerHour: dollars(14),
       },
     ],
   });
@@ -362,16 +362,16 @@ async function main() {
 
   const catalog = await Promise.all(
     [
-      ["BRK-4471", "Ceramic brake pad set, front", 3812, 8995, 14, napa.id],
-      ["BRK-9902", "Brake rotor, front (pair)", 6420, 15400, 8, napa.id],
-      ["OIL-5W30", "Full synthetic oil 5W-30, quart", 519, 1295, 96, napa.id],
-      ["FLT-3614", "Oil filter, spin-on", 428, 1450, 40, napa.id],
-      ["BAT-H6", "AGM battery, group H6", 12800, 24900, 6, napa.id],
-      ["ALT-2288", "Alternator, remanufactured", 17450, 38900, 3, dealer.id],
-      ["SPK-IR4", "Iridium spark plug", 812, 2195, 32, dealer.id],
-      ["CAB-7712", "Cabin air filter", 940, 3200, 22, napa.id],
-      ["SER-BELT", "Serpentine belt", 1875, 5400, 11, napa.id],
-      ["COOL-50", "Coolant, premixed gallon", 1120, 2850, 18, napa.id],
+      ["BRK-4471", "Ceramic brake pad set, front", 1000, 2200, 14, napa.id],
+      ["BRK-9902", "Brake rotor, front (single)", 1200, 2600, 8, napa.id],
+      ["OIL-5W30", "Full synthetic oil 5W-30, quart", 350, 700, 96, napa.id],
+      ["FLT-3614", "Oil filter, spin-on", 350, 800, 40, napa.id],
+      ["BAT-H6", "Standard battery service", 1400, 2800, 6, napa.id],
+      ["ALT-2288", "Alternator pulley & belt tensioner", 1400, 2800, 3, dealer.id],
+      ["SPK-IR4", "Iridium spark plug set", 400, 1000, 32, dealer.id],
+      ["CAB-7712", "Cabin air filter", 500, 1200, 22, napa.id],
+      ["SER-BELT", "Serpentine belt", 700, 1500, 11, napa.id],
+      ["COOL-50", "Coolant flush additive", 500, 1200, 18, napa.id],
     ].map(([partNumber, description, cost, price, onHand, supplierId]) =>
       prisma.catalogItem.create({
         data: {
@@ -728,22 +728,14 @@ async function main() {
         catalogItemId: part("BRK-4471").id,
       },
       {
-        lineType: "PART",
-        description: "Brake rotor, front (pair)",
-        quantity: 1,
-        unitPrice: part("BRK-9902").priceCents,
-        unitCost: part("BRK-9902").costCents,
-        catalogItemId: part("BRK-9902").id,
-      },
-      {
         lineType: "LABOR",
-        description: "Replace front pads and rotors",
-        quantity: 2.5,
-        unitPrice: dollars(145),
-        unitCost: dollars(42),
-        hours: 2.5,
+        description: "Replace front brake pads",
+        quantity: 0.25,
+        unitPrice: dollars(40),
+        unitCost: dollars(16),
+        hours: 0.25,
       },
-      { lineType: "FEE", description: "Shop supplies", quantity: 1, unitPrice: dollars(18) },
+      { lineType: "FEE", description: "Shop supplies", quantity: 1, unitPrice: dollars(2) },
     ],
   });
 
@@ -764,12 +756,12 @@ async function main() {
       {
         lineType: "LABOR",
         description: "Replace serpentine belt",
-        quantity: 1,
-        unitPrice: dollars(145),
-        unitCost: dollars(42),
-        hours: 1,
+        quantity: 0.25,
+        unitPrice: dollars(40),
+        unitCost: dollars(16),
+        hours: 0.25,
       },
-      { lineType: "FEE", description: "Environmental disposal", quantity: 1, unitPrice: dollars(12) },
+      { lineType: "FEE", description: "Environmental disposal", quantity: 1, unitPrice: dollars(3) },
     ],
   });
 
@@ -781,11 +773,11 @@ async function main() {
     lines: [
       {
         lineType: "LABOR",
-        description: "Hybrid system diagnostic",
-        quantity: 1.5,
-        unitPrice: dollars(175),
-        unitCost: dollars(48),
-        hours: 1.5,
+        description: "Hybrid system diagnostic check",
+        quantity: 0.5,
+        unitPrice: dollars(40),
+        unitCost: dollars(16),
+        hours: 0.5,
       },
     ],
   });
@@ -990,20 +982,12 @@ async function main() {
         catalogItemId: part("BRK-4471").id,
       },
       {
-        lineType: "PART",
-        description: "Brake rotor, front (pair)",
-        quantity: 1,
-        unitPrice: part("BRK-9902").priceCents,
-        unitCost: part("BRK-9902").costCents,
-        catalogItemId: part("BRK-9902").id,
-      },
-      {
         lineType: "LABOR",
-        description: "Replace front pads and rotors",
-        quantity: 2.5,
-        unitPrice: dollars(145),
-        unitCost: dollars(42),
-        hours: 2.5,
+        description: "Replace front brake pads",
+        quantity: 0.25,
+        unitPrice: dollars(40),
+        unitCost: dollars(16),
+        hours: 0.25,
       },
     ],
   });
@@ -1011,18 +995,10 @@ async function main() {
   await completeJob({
     customerIdx: 2,
     number: "RO-1201",
-    concern: "Charging system failure",
+    concern: "Charging system inspection",
     daysAgo: 12,
     settle: "partly_paid_cash",
     lines: [
-      {
-        lineType: "PART",
-        description: "Alternator, remanufactured",
-        quantity: 1,
-        unitPrice: part("ALT-2288").priceCents,
-        unitCost: part("ALT-2288").costCents,
-        catalogItemId: part("ALT-2288").id,
-      },
       {
         lineType: "PART",
         description: "Serpentine belt",
@@ -1033,27 +1009,27 @@ async function main() {
       },
       {
         lineType: "LABOR",
-        description: "Replace alternator and belt",
-        quantity: 3,
-        unitPrice: dollars(145),
-        unitCost: dollars(42),
-        hours: 3,
+        description: "Replace serpentine belt and inspect pulley",
+        quantity: 0.25,
+        unitPrice: dollars(40),
+        unitCost: dollars(16),
+        hours: 0.25,
       },
-      { lineType: "DISCOUNT", description: "Repeat customer courtesy", quantity: 1, unitPrice: dollars(40), unitCost: 0 },
+      { lineType: "DISCOUNT", description: "Repeat customer courtesy", quantity: 1, unitPrice: dollars(5), unitCost: 0 },
     ],
   });
 
   const unpaidJob = await completeJob({
     customerIdx: 5,
     number: "RO-1202",
-    concern: "Fleet service: brakes, oil and fluids",
+    concern: "Fleet service: oil and filter",
     daysAgo: 45,
     settle: "unpaid",
     lines: [
       {
         lineType: "PART",
         description: "Full synthetic oil 5W-30, quart",
-        quantity: 12,
+        quantity: 2,
         unitPrice: part("OIL-5W30").priceCents,
         unitCost: part("OIL-5W30").costCents,
         catalogItemId: part("OIL-5W30").id,
@@ -1068,45 +1044,93 @@ async function main() {
       },
       {
         lineType: "LABOR",
-        description: "Fleet service package",
-        quantity: 4,
-        unitPrice: dollars(120),
-        unitCost: dollars(42),
-        hours: 4,
+        description: "Fleet oil service package",
+        quantity: 0.25,
+        unitPrice: dollars(35),
+        unitCost: dollars(14),
+        hours: 0.25,
       },
     ],
   });
 
+  // Additional active jobs for TODAY in both shops
+  await completeJob({
+    customerIdx: 4,
+    number: "RO-1203",
+    concern: "[Tires Shop] Radial tire mount, balance & bead seal",
+    daysAgo: 0,
+    settle: "paid_card",
+    lines: [
+      {
+        lineType: "PART",
+        description: "[Tires Shop] Standard Radial Tire 205/55R16",
+        quantity: 1,
+        unitPrice: dollars(22),
+        unitCost: dollars(10),
+      },
+      {
+        lineType: "LABOR",
+        description: "[Tires Shop] Mount and road force balance",
+        quantity: 0.25,
+        unitPrice: dollars(40),
+        unitCost: dollars(16),
+        hours: 0.25,
+      },
+      { lineType: "FEE", description: "[Tires Shop] Valve stem replacement", quantity: 1, unitPrice: dollars(3), unitCost: 0 },
+    ],
+  });
+
+  await completeJob({
+    customerIdx: 3,
+    number: "RO-1204",
+    concern: "[Mufflers Shop] Custom muffler weld & exhaust clamp",
+    daysAgo: 0,
+    settle: "partly_paid_cash",
+    lines: [
+      {
+        lineType: "PART",
+        description: "[Mufflers Shop] Glasspack high-flow muffler",
+        quantity: 1,
+        unitPrice: dollars(24),
+        unitCost: dollars(12),
+      },
+      {
+        lineType: "LABOR",
+        description: "[Mufflers Shop] Exhaust pipe welding & fitment",
+        quantity: 0.25,
+        unitPrice: dollars(40),
+        unitCost: dollars(16),
+        hours: 0.25,
+      },
+      { lineType: "FEE", description: "[Mufflers Shop] Heavy duty exhaust clamp", quantity: 1, unitPrice: dollars(2), unitCost: 0 },
+    ],
+  });
+
   // -- deposit taken and applied -------------------------------------------
-  // The fleet customer paid a deposit up front against the job that is still
-  // outstanding, so the finance screen has a real partly-settled invoice.
   await prisma.$transaction(async (tx) => {
     const deposit = await recordDeposit(tx, {
       organizationId: primary.org.id,
       customerId: customers[5].id,
-      amount: dollars(200),
+      amount: dollars(20),
       method: "CARD_ONLINE",
       note: "Deposit toward fleet service",
       actorId: advisor.id,
     });
-    // Half of it is still an unapplied liability, which is what the finance
-    // screen should show as customer credit held.
     await applyDeposit(tx, {
       organizationId: primary.org.id,
       depositId: deposit.id,
       invoiceId: unpaidJob.invoice.id,
-      amount: dollars(100),
+      amount: dollars(15),
       actorId: advisor.id,
     });
   });
 
-  // A second customer holds an entirely unapplied credit.
-  await prisma.$transaction((tx) =>
+  await prisma.$transaction(async (tx) =>
     recordDeposit(tx, {
       organizationId: primary.org.id,
       customerId: customers[1].id,
-      amount: dollars(150),
-      method: "CARD_ONLINE",
+      amount: dollars(15),
+      method: "CASH",
       note: "Deposit toward hybrid diagnostic",
       actorId: advisor.id,
     }),
@@ -1117,7 +1141,7 @@ async function main() {
     issueCreditNote(tx, {
       organizationId: primary.org.id,
       invoiceId: paidJob.invoice.id,
-      amount: dollars(25),
+      amount: dollars(5),
       taxAmount: 0,
       reason: "Goodwill credit: vehicle returned for a squeak recheck",
       actorId: manager.id,
@@ -1126,13 +1150,13 @@ async function main() {
 
   // -- expenses -------------------------------------------------------------
   const expenses = [
-    ["Rent", "Tchoupitoulas Property Co", 385000, false, 20],
-    ["Utilities", "Entergy New Orleans", 68400, false, 15],
-    ["Shop supplies", "Gulf Coast Parts", 21250, false, 10],
-    ["Insurance", "Pelican Mutual", 142000, false, 8],
-    ["Tools", "Snap-on Route Truck", 47900, true, 5],
-    ["Software", "Auto Shop Web App", 19900, false, 3],
-    ["Waste disposal", "Delta Environmental", 12500, true, 2],
+    ["Rent", "Tchoupitoulas Property Co", 4500, false, 20],
+    ["Utilities", "Entergy New Orleans", 3200, false, 15],
+    ["Shop supplies", "Gulf Coast Parts", 2150, false, 10],
+    ["Insurance", "Pelican Mutual", 4200, false, 8],
+    ["Tools", "Snap-on Route Truck", 4650, true, 5],
+    ["Software", "Auto Shop Web App", 1990, false, 3],
+    ["Waste disposal", "Delta Environmental", 1250, true, 2],
   ];
   for (const [category, vendor, amount, isCash, daysAgo] of expenses) {
     await prisma.$transaction(async (tx) => {
@@ -1180,14 +1204,14 @@ async function main() {
         organizationId: primary.org.id,
         kind: "payout_not_received",
         reference: "payout_2026_09_18",
-        amount: dollars(1240.55),
+        amount: dollars(35),
         detail: "Processor reported a payout five days ago; nothing seen in the bank yet.",
       },
       {
         organizationId: primary.org.id,
         kind: "unknown_attempt",
         reference: "seed-timeout-demo",
-        amount: dollars(318.4),
+        amount: dollars(25),
         detail:
           "Terminal request timed out. Outcome unknown; resolve before retrying on another processor.",
       },
@@ -1202,7 +1226,7 @@ async function main() {
       invoiceId: unpaidJob.invoice.id,
       provider: "mock",
       method: "CARD_TERMINAL",
-      amount: dollars(318.4),
+      amount: dollars(25),
       idempotencyKey: "seed-timeout-demo",
       status: "UNKNOWN",
       externalId: "mock_pi_seed_timeout",
@@ -1276,16 +1300,16 @@ async function seedInventory(organizationId: string) {
     serialPrefix: string;
     count: number;
   }> = [
-    { kind: "TIRE", brand: "Michelin", name: "Defender2", size: "225/65R17", cost: 142.0, price: 219.0, reorderPoint: 4, serialPrefix: "DOTB3LLJ7Y", count: 8 },
-    { kind: "TIRE", brand: "Goodyear", name: "Assurance WeatherReady", size: "215/55R17", cost: 118.5, price: 185.0, reorderPoint: 4, serialPrefix: "DOTMD1RKN", count: 3 },
-    { kind: "TIRE", brand: "Cooper", name: "Endeavor", size: "205/55R16", cost: 78.0, price: 129.0, reorderPoint: 4, serialPrefix: "DOTUP8FXR", count: 12 },
-    { kind: "TIRE", brand: "Economy", name: "Tire", size: "Standard Radial", cost: 28.0, price: 48.0, reorderPoint: 4, serialPrefix: "DOTE48TR", count: 10 },
-    { kind: "TIRE", brand: "Firestone", name: "Destination LE3", size: "265/70R17", cost: 136.0, price: 209.0, reorderPoint: 4, serialPrefix: "DOTVN4TPL", count: 2 },
+    { kind: "TIRE", brand: "Michelin", name: "Defender2", size: "225/65R17", cost: 15.0, price: 30.0, reorderPoint: 4, serialPrefix: "DOTB3LLJ7Y", count: 8 },
+    { kind: "TIRE", brand: "Goodyear", name: "Assurance WeatherReady", size: "215/55R17", cost: 16.0, price: 32.0, reorderPoint: 4, serialPrefix: "DOTMD1RKN", count: 3 },
+    { kind: "TIRE", brand: "Cooper", name: "Endeavor", size: "205/55R16", cost: 14.0, price: 28.0, reorderPoint: 4, serialPrefix: "DOTUP8FXR", count: 12 },
+    { kind: "TIRE", brand: "Economy", name: "Tire", size: "Standard Radial", cost: 10.0, price: 20.0, reorderPoint: 4, serialPrefix: "DOTE48TR", count: 10 },
+    { kind: "TIRE", brand: "Firestone", name: "Destination LE3", size: "265/70R17", cost: 18.0, price: 35.0, reorderPoint: 4, serialPrefix: "DOTVN4TPL", count: 2 },
 
-    { kind: "MUFFLER", brand: "Walker", name: "Quiet-Flow Stainless Muffler", size: '2.25" in / 2.25" out', cost: 64.0, price: 149.0, reorderPoint: 3, serialPrefix: "WK21638", count: 6 },
-    { kind: "MUFFLER", brand: "Flowmaster", name: "Super 44", size: '2.5" in / 2.5" out', cost: 102.0, price: 229.0, reorderPoint: 2, serialPrefix: "FM942548", count: 1 },
-    { kind: "MUFFLER", brand: "Cherry Bomb", name: "Glasspack", size: '2" in / 2" out', cost: 38.0, price: 95.0, reorderPoint: 3, serialPrefix: "CB87517", count: 5 },
-    { kind: "OTHER", brand: "Walker", name: "Universal Catalytic Converter", size: '2.25"', cost: 158.0, price: 389.0, reorderPoint: 2, serialPrefix: "WKCAT1591", count: 3 },
+    { kind: "MUFFLER", brand: "Walker", name: "Quiet-Flow Stainless Muffler", size: '2.25" in / 2.25" out', cost: 16.0, price: 32.0, reorderPoint: 3, serialPrefix: "WK21638", count: 6 },
+    { kind: "MUFFLER", brand: "Flowmaster", name: "Super 44", size: '2.5" in / 2.5" out', cost: 18.0, price: 35.0, reorderPoint: 2, serialPrefix: "FM942548", count: 1 },
+    { kind: "MUFFLER", brand: "Cherry Bomb", name: "Glasspack", size: '2" in / 2" out', cost: 12.0, price: 22.0, reorderPoint: 3, serialPrefix: "CB87517", count: 5 },
+    { kind: "OTHER", brand: "Walker", name: "Universal Exhaust Pipe Kit", size: '2.25"', cost: 15.0, price: 30.0, reorderPoint: 2, serialPrefix: "WKCAT1591", count: 3 },
   ];
 
   for (const p of products) {

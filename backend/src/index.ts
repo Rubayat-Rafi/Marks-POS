@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
@@ -13,7 +16,25 @@ import { bootstrapAdminUser } from "./bootstrap/admin.bootstrap.js";
 const app = express();
 
 app.set("trust proxy", 1);
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+        connectSrc: [
+          "'self'",
+          env.publicWebUrl,
+          ...env.corsOrigin.split(",").map((o) => o.trim()),
+        ].filter(Boolean),
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  }),
+);
 app.use(
   cors({
     origin: env.corsOrigin.split(",").map((o) => o.trim()),
@@ -36,8 +57,25 @@ app.use("/api/v1/webhooks", webhookRouter);
 
 app.use(express.json({ limit: "1mb" }));
 
-// Root route
-app.get("/", (_req, res) => {
+// In production or when frontend build exists, locate the SPA assets
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const possibleDistPaths = [
+  path.resolve(__dirname, "../../frontend/dist"),
+  path.resolve(__dirname, "../public"),
+  path.resolve(process.cwd(), "frontend/dist"),
+  path.resolve(process.cwd(), "public"),
+];
+const frontendDistPath = possibleDistPaths.find((p) => fs.existsSync(p));
+
+if (frontendDistPath) {
+  app.use(express.static(frontendDistPath));
+}
+
+// Root route: serves frontend index.html when available and HTML requested, else API info
+app.get("/", (req, res, next) => {
+  if (frontendDistPath && req.accepts(["html", "json"]) === "html") {
+    return res.sendFile(path.join(frontendDistPath, "index.html"));
+  }
   res.json({
     service: "autoshop-api",
     status: "up",
@@ -69,6 +107,16 @@ app.get(["/health", "/api/health"], async (_req, res) => {
 
 // Main API Routes
 app.use("/api/v1", router);
+
+// SPA client-side routing fallback: any non-API route serves index.html
+if (frontendDistPath) {
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api") || req.path === "/health") {
+      return next();
+    }
+    res.sendFile(path.join(frontendDistPath, "index.html"));
+  });
+}
 
 // Error handling
 app.use(notFoundHandler);

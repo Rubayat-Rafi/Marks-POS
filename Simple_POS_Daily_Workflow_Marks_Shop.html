@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Simple POS Daily Workflow - Mark's Tire & Muffler</title>
+  <style>
+    @page {
+      size: letter portrait;
+      margin: 12mm 12mm 12mm 12mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #1e293b;
+      background: #ffffff;
+      margin: 0;
+      padding: 0;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .brand-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: -0.5px;
+      margin: 0;
+    }
+    .brand-sub {
+      font-size: 13px;
+      font-weight: 600;
+      color: #2563eb;
+      margin-top: 2px;
+    }
+    .badge {
+      display: inline-block;
+      background: #0f172a;
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+
+    .workflow-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .card {
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: #f8fafc;
+    }
+    .card-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 8px;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 6px;
+    }
+    .step-num {
+      background: #2563eb;
+      color: #fff;
+      border-radius: 50%;
+      width: 22px;
+      height: 22px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: bold;
+    }
+
+    ol, ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+    li {
+      margin-bottom: 5px;
+    }
+
+    .shop-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+      font-size: 12px;
+    }
+    .shop-table th, .shop-table td {
+      border: 1px solid #cbd5e1;
+      padding: 6px 8px;
+      text-align: left;
+    }
+    .shop-table th {
+      background: #e2e8f0;
+      font-weight: 700;
+      color: #1e293b;
+    }
+    .shop-tire {
+      background: #f0fdf4;
+      color: #166534;
+      font-weight: 600;
+    }
+    .shop-muffler {
+      background: #fef2f2;
+      color: #991b1b;
+      font-weight: 600;
+    }
+
+    .highlight-box {
+      background: #eff6ff;
+      border-left: 4px solid #2563eb;
+      padding: 8px 12px;
+      border-radius: 4px;
+      margin-top: 10px;
+      font-size: 12px;
+    }
+    .highlight-box strong {
+      color: #1e40af;
+    }
+
+    .success-box {
+      background: #f0fdf4;
+      border-left: 4px solid #16a34a;
+      padding: 8px 12px;
+      border-radius: 4px;
+      margin-top: 10px;
+      font-size: 12px;
+    }
+    .success-box strong {
+      color: #166534;
+    }
+
+    .checklist-card {
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 12px 14px;
+      margin-top: 12px;
+    }
+    .checklist-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .checklist-items {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      font-size: 11.5px;
+    }
+    .checklist-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      background: #f8fafc;
+      padding: 6px 8px;
+      border-radius: 4px;
+      border: 1px solid #e2e8f0;
+    }
+    .checkbox {
+      width: 14px;
+      height: 14px;
+      border: 2px solid #64748b;
+      border-radius: 3px;
+      display: inline-block;
+      margin-top: 1px;
+    }
+
+    .footer {
+      margin-top: 14px;
+      padding-top: 8px;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div>
+      <h1 class="brand-title">Mark's Tire & Muffler Shop</h1>
+      <div class="brand-sub">Daily POS Quick Reference & Counter Staff Workflow</div>
+    </div>
+    <div style="text-align: right;">
+      <span class="badge">Standard Operating Procedure</span>
+      <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Easy 4-Step Daily Routine</div>
+    </div>
+  </div>
+
+  <div class="workflow-grid">
+    <!-- STEP 1 -->
+    <div class="card">
+      <div class="card-title">
+        <span class="step-num">1</span>
+        <span>Ring Up Counter Sale (Quick Sale / POS)</span>
+      </div>
+      <ol>
+        <li>Click <strong>Quick Sale</strong> or <strong>POS</strong> in the left navigation menu.</li>
+        <li><strong>Add items / services</strong> to invoice:
+          <ul>
+            <li>Type tire size (e.g. <code>205/55R16</code>, <code>225/65R17</code>) or service (Mount & Balance, Flat Repair).</li>
+            <li>For exhaust: select Muffler, Catalytic Converter, Pipe Welding, etc.</li>
+          </ul>
+        </li>
+        <li><strong>Collect payment:</strong>
+          <ul>
+            <li>💵 <strong>Cash:</strong> Enter amount received. Cash goes straight into your till drawer.</li>
+            <li>💳 <strong>Card:</strong> Swipe or tap card on the counter payment terminal.</li>
+          </ul>
+        </li>
+        <li>Click <strong>Complete / Pay</strong> &rarr; Receipt prints or displays immediately!</li>
+      </ol>
+    </div>
+
+    <!-- STEP 2 -->
+    <div class="card">
+      <div class="card-title">
+        <span class="step-num">2</span>
+        <span>Automatic Shop Separation</span>
+      </div>
+      <p style="margin-top: 0; margin-bottom: 6px;">The POS automatically routes money into the right shop without any manual math:</p>
+      <table class="shop-table">
+        <thead>
+          <tr>
+            <th>Shop</th>
+            <th>Keywords / Items</th>
+            <th>Reports As</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="shop-tire">🛞 Tires Shop</td>
+            <td>Tire sizes (<code>205/55R16</code>), Used Tires, New Tires, Mount, Balance, Valve Stem</td>
+            <td>Tires Daily Gross, Tires Cash in Drawer</td>
+          </tr>
+          <tr>
+            <td class="shop-muffler">🔧 Mufflers Shop</td>
+            <td>Muffler, Catalytic Converter, Exhaust Pipe, Hanger, Welding Labor</td>
+            <td>Muffler Gross, Muffler Card/Cash Totals</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="highlight-box">
+        <strong>💡 Multi-item sale?</strong> If a customer gets both a tire and a muffler weld, the POS automatically splits the revenue to each shop's ledger accurately.
+      </div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="card">
+      <div class="card-title">
+        <span class="step-num">3</span>
+        <span>Checking Money Received (Finance Page)</span>
+      </div>
+      <ul>
+        <li>Open <strong>Finance</strong> from the left menu to view all transactions.</li>
+        <li><strong>Cash Payments (💵):</strong>
+          <ul>
+            <li>Clearly tagged as <code>💵 Cash</code> & <code>✓ In Cash Drawer</code>.</li>
+            <li><strong>No bank reference or payout confirmation needed</strong> — cash is already physically in your counter drawer!</li>
+          </ul>
+        </li>
+        <li><strong>Card Payments (💳):</strong>
+          <ul>
+            <li>Tagged as <code>💳 Card (Counter Terminal)</code>. Settled through card processor clearing.</li>
+          </ul>
+        </li>
+      </ul>
+      <div class="success-box">
+        <strong>✓ Zero Confusion:</strong> Cash is in hand immediately; card payments reconcile with your batch terminal report.
+      </div>
+    </div>
+
+    <!-- STEP 4 -->
+    <div class="card">
+      <div class="card-title">
+        <span class="step-num">4</span>
+        <span>End of Day: Print Daily Sales PDF (&lt; 1 Min)</span>
+      </div>
+      <p style="margin-top: 0; margin-bottom: 6px;">At daily closing time, generate your printable sales report:</p>
+      <ol>
+        <li>Click <strong>Reports</strong> from the left menu.</li>
+        <li>Date Filter is set to <strong>Today</strong> by default.</li>
+        <li>Click your desired 1-click PDF button:
+          <ul>
+            <li>🖨️ <strong>Print Tires PDF:</strong> Prints only Tires Shop sales & invoices.</li>
+            <li>🖨️ <strong>Print Mufflers PDF:</strong> Prints only Mufflers Shop sales & invoices.</li>
+            <li>🖨️ <strong>Print / Save as PDF:</strong> Complete consolidated shop report.</li>
+          </ul>
+        </li>
+        <li>Print directly to paper or choose <strong>"Save as PDF"</strong> for owner record keeping.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- DAILY CHECKLIST -->
+  <div class="checklist-card">
+    <div class="checklist-title">Daily Counter Staff Checklist</div>
+    <div class="checklist-items">
+      <div class="checklist-item">
+        <span class="checkbox"></span>
+        <div><strong>Morning Opening:</strong> Log into POS and confirm cash drawer starting float.</div>
+      </div>
+      <div class="checklist-item">
+        <span class="checkbox"></span>
+        <div><strong>Every Customer:</strong> Create invoice in Quick Sale / POS, choose Cash or Card.</div>
+      </div>
+      <div class="checklist-item">
+        <span class="checkbox"></span>
+        <div><strong>Evening Closing:</strong> Go to Reports &rarr; Click <strong>Print PDF</strong> &rarr; Match cash drawer.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>Mark's Tire & Muffler • Standard Operating Guide • Version 1.0</div>
+    <div>System URL: <strong>https://marks.chromopay.com</strong> • API: <strong>https://auto.chromopay.com</strong></div>
+  </div>
+
+</body>
+</html>

@@ -52,7 +52,7 @@ async function ensureShop() {
           state: "LA",
           postalCode: "70117",
           phone: "(504) 354-9396",
-          bayCount: 5,
+          bayCount: 8,
         },
       },
     },

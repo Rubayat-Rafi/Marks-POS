@@ -22,6 +22,7 @@ import {
 } from "../components/ui";
 import { Icon } from "../components/Icon";
 import { PrintReportModal, type PrintReportConfig } from "../features/finance/FinancePrintReports";
+import { SHOP_PALETTES } from "../lib/shopColors";
 
 type Receivables = {
   rows: Array<{
@@ -97,7 +98,7 @@ export function FinancePage() {
         ))}
       </div>
 
-      {tab === "receivables" && <Receivables />}
+      {tab === "receivables" && <Receivables onPrint={(cfg) => setPrintConfig(cfg)} />}
       {tab === "payments" && (
         <Payments onPrint={(payments) => setPrintConfig({ type: "PAYMENTS", title: "All Payments Register", data: payments })} />
       )}
@@ -152,7 +153,7 @@ function downloadFinanceCsv(filename: string, headers: string[], rows: (string |
   URL.revokeObjectURL(url);
 }
 
-function Receivables() {
+function Receivables({ onPrint }: { onPrint?: (config: any) => void }) {
   const [viewMode, setViewMode] = useState<"UNPAID" | "ALL">("UNPAID");
 
   const receivables = useQuery({
@@ -291,16 +292,20 @@ function Receivables() {
                     All Invoices ({invoicesList.length})
                   </button>
                 </div>
-
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={handleExportCsv}
-                  className="text-xs gap-1 font-bold border-slate-300"
-                  title="Download table data as CSV"
+                  onClick={() =>
+                    onPrint?.({
+                      type: "INVOICES",
+                      title: viewMode === "UNPAID" ? "Outstanding Customer Receivables" : "All Invoices & Payments Register",
+                      data: viewMode === "UNPAID" ? data.rows : invoicesList,
+                    })
+                  }
+                  className="gap-1.5 font-bold text-xs shadow-2xs"
                 >
-                  <Icon name="tag" className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>Download CSV</span>
+                  <Icon name="printer" className="h-3.5 w-3.5 text-slate-700" />
+                  Print / Save PDF
                 </Button>
               </div>
             }
@@ -548,9 +553,28 @@ function Payments({ onPrint }: { onPrint?: (payments: PaymentRow[]) => void }) {
                   {dateOnly(p.receivedAt)}
                 </td>
                 <td className="px-3 py-2">{customerLabel(p.customer)}</td>
-                <td className="px-3 py-2 text-xs text-slate-600">
-                  {p.method.toLowerCase().replace("_", " ")}
-                  <span className="ml-1 text-slate-400">({p.provider})</span>
+                <td className="px-3 py-2 text-xs">
+                  {p.method === "CASH" ? (
+                    <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                      <span>💵</span> Cash
+                    </span>
+                  ) : p.method === "CHECK" ? (
+                    <span className="inline-flex items-center gap-1 font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                      <span>📝</span> Check
+                    </span>
+                  ) : p.method === "CARD_TERMINAL" ? (
+                    <span className="inline-flex items-center gap-1 font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md">
+                      <span>💳</span> Card (Counter Terminal)
+                    </span>
+                  ) : p.method === "CARD_ONLINE" ? (
+                    <span className="inline-flex items-center gap-1 font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md">
+                      <span>🌐</span> Card (Online Pay)
+                    </span>
+                  ) : (
+                    <span className="font-medium text-slate-700">
+                      {p.method.toLowerCase().replace("_", " ")}
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2 font-mono text-xs text-slate-500">
                   {p.allocations.map((a) => a.invoice.number).join(", ") || "unapplied"}
@@ -567,13 +591,23 @@ function Payments({ onPrint }: { onPrint?: (payments: PaymentRow[]) => void }) {
                   {p.feeAmount > 0 ? money(p.feeAmount) : "—"}
                 </td>
                 <td className="px-3 py-2">
-                  {p.provider === "manual" ? (
+                  {p.method === "CASH" ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60">
+                      ✓ In Cash Drawer
+                    </span>
+                  ) : p.method === "CHECK" ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                      ✓ Check in hand
+                    </span>
+                  ) : p.provider === "manual" ? (
                     <span className="text-xs text-slate-500">at the counter</span>
                   ) : p.bankConfirmedAt ? (
-                    <span className="text-xs font-medium text-teal-700">in the bank</span>
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200/60">
+                      ✓ In the bank
+                    </span>
                   ) : (
-                    <span className="text-xs font-medium text-amber-700">
-                      processor clearing
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/60">
+                      Card processor clearing
                     </span>
                   )}
                 </td>
@@ -581,13 +615,15 @@ function Payments({ onPrint }: { onPrint?: (payments: PaymentRow[]) => void }) {
                   <div className="flex justify-end gap-2">
                     {can("finance.reconcile") &&
                       p.provider !== "manual" &&
+                      p.method !== "CASH" &&
+                      p.method !== "CHECK" &&
                       !p.bankConfirmedAt && (
-                        <Button variant="secondary" onClick={() => setConfirming(p)}>
-                          Confirm payout
+                        <Button variant="secondary" size="sm" onClick={() => setConfirming(p)}>
+                          Confirm card payout
                         </Button>
                       )}
                     {can("payments.refund") && p.amountRefunded < p.amount && (
-                      <Button variant="secondary" onClick={() => setRefunding(p)}>
+                      <Button variant="secondary" size="sm" onClick={() => setRefunding(p)}>
                         Refund
                       </Button>
                     )}
@@ -1295,36 +1331,51 @@ function Ledger({ onPrint }: { onPrint?: (tb: TrialBalance) => void }) {
   );
 }
 
+function toShopDateString(d: Date, timeZone = "America/Chicago"): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(d);
+  } catch {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+}
+
 function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => void }) {
+  const { user } = useAuth();
+  const shopTimezone = user?.organization?.timezone || "America/Chicago";
   const [departmentView, setDepartmentView] = useState<"ALL" | "TIRE" | "MUFFLER">("ALL");
-  const [from, setFrom] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d.toISOString().slice(0, 10);
-  });
-  const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [activePreset, setActivePreset] = useState<number | "custom">(0);
+  const [from, setFrom] = useState(() => toShopDateString(new Date(), shopTimezone));
+  const [to, setTo] = useState(() => toShopDateString(new Date(), shopTimezone));
 
   const salesQuery = useQuery({
     queryKey: ["daily-sales-report", from, to],
-    queryFn: () => api.get<any>(`/reports/daily-sales?from=${from}&to=${to}`),
+    queryFn: () => api.get<any>(`/reports/daily-sales?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
   });
 
   const setRangePreset = (days: number) => {
+    setActivePreset(days);
     const now = new Date();
-    const endStr = now.toISOString().slice(0, 10);
-    const start = new Date();
+    const todayStr = toShopDateString(now, shopTimezone);
     if (days === 0) {
-      setFrom(endStr);
-      setTo(endStr);
+      setFrom(todayStr);
+      setTo(todayStr);
     } else if (days === 1) {
-      start.setDate(start.getDate() - 1);
-      const yestStr = start.toISOString().slice(0, 10);
+      const yest = new Date(now.getTime() - 86_400_000);
+      const yestStr = toShopDateString(yest, shopTimezone);
       setFrom(yestStr);
       setTo(yestStr);
     } else {
-      start.setDate(start.getDate() - days);
-      setFrom(start.toISOString().slice(0, 10));
-      setTo(endStr);
+      const start = new Date(now.getTime() - days * 86_400_000);
+      setFrom(toShopDateString(start, shopTimezone));
+      setTo(todayStr);
     }
   };
 
@@ -1346,41 +1397,38 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium text-slate-600">Quick Ranges:</span>
-            <button
-              type="button"
-              onClick={() => setRangePreset(0)}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              onClick={() => setRangePreset(1)}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
-            >
-              Yesterday
-            </button>
-            <button
-              type="button"
-              onClick={() => setRangePreset(7)}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
-            >
-              Last 7 Days
-            </button>
-            <button
-              type="button"
-              onClick={() => setRangePreset(30)}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
-            >
-              Last 30 Days
-            </button>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 mr-1 flex items-center gap-1">
+              <Icon name="calendar" className="h-4 w-4 text-slate-400" />
+              Quick Ranges:
+            </span>
+            {[
+              { label: "Today", days: 0 },
+              { label: "Yesterday", days: 1 },
+              { label: "Last 7 Days", days: 7 },
+              { label: "Last 30 Days", days: 30 },
+            ].map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => setRangePreset(p.days)}
+                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                  activePreset === p.days
+                    ? "bg-brand-600 text-white shadow-2xs"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
 
             <div className="ml-2 flex items-center gap-1.5 font-mono text-xs">
               <input
                 type="date"
                 value={from}
-                onChange={(e) => setFrom(e.target.value)}
+                onChange={(e) => {
+                  setActivePreset("custom");
+                  setFrom(e.target.value);
+                }}
                 className="h-8 rounded-md border border-slate-300 px-2 text-xs"
                 aria-label="Start Date"
               />
@@ -1388,43 +1436,53 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
               <input
                 type="date"
                 value={to}
-                onChange={(e) => setTo(e.target.value)}
+                onChange={(e) => {
+                  setActivePreset("custom");
+                  setTo(e.target.value);
+                }}
                 className="h-8 rounded-md border border-slate-300 px-2 text-xs"
                 aria-label="End Date"
               />
+              <span className="text-[11px] text-slate-400 font-medium">({shopTimezone})</span>
             </div>
           </div>
         </div>
 
         {/* Separated Print Buttons Bar */}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-          <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1">
+          <div className="flex items-center gap-1 rounded-2xl bg-white p-1 border border-slate-200 shadow-sm">
             <button
               type="button"
               onClick={() => setDepartmentView("ALL")}
-              className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
-                departmentView === "ALL" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
+              className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                departmentView === "ALL"
+                  ? SHOP_PALETTES.ALL.activeTabClass
+                  : SHOP_PALETTES.ALL.inactiveTabClass
               }`}
             >
-              All Departments Combined
+              <Icon name="store" className="h-3.5 w-3.5" /> All Departments
             </button>
             <button
               type="button"
               onClick={() => setDepartmentView("TIRE")}
-              className={`flex items-center gap-1 rounded-md px-3 py-1 text-xs font-semibold transition ${
-                departmentView === "TIRE" ? "bg-white text-blue-700 shadow-2xs" : "text-slate-600 hover:text-slate-900"
+              className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                departmentView === "TIRE"
+                  ? SHOP_PALETTES.TIRE.activeTabClass
+                  : SHOP_PALETTES.TIRE.inactiveTabClass
               }`}
             >
-              <Icon name="tag" className="h-3.5 w-3.5" /> Tire Shop Sales
+              <Icon name="tire" className="h-3.5 w-3.5" /> Tire Shop Sales
             </button>
             <button
               type="button"
               onClick={() => setDepartmentView("MUFFLER")}
-              className={`flex items-center gap-1 rounded-md px-3 py-1 text-xs font-semibold transition ${
-                departmentView === "MUFFLER" ? "bg-white text-amber-700 shadow-2xs" : "text-slate-600 hover:text-slate-900"
+              className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                departmentView === "MUFFLER"
+                  ? SHOP_PALETTES.MUFFLER.activeTabClass
+                  : SHOP_PALETTES.MUFFLER.inactiveTabClass
               }`}
             >
-              <Icon name="wrench" className="h-3.5 w-3.5" /> Mufflers Shop Sales
+              <Icon name="pipe" className="h-3.5 w-3.5" /> Mufflers Shop Sales
             </button>
           </div>
 
@@ -1441,7 +1499,7 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
                 })
               }
             >
-              <Icon name="printer" className="h-4 w-4 text-blue-600" /> Print Tire Shop Sales
+              <Icon name="printer" className="h-4 w-4 text-emerald-700" /> Print / Save PDF (Tire Shop)
             </Button>
             <Button
               variant="secondary"
@@ -1455,7 +1513,7 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
                 })
               }
             >
-              <Icon name="printer" className="h-4 w-4 text-amber-600" /> Print Mufflers Shop Sales
+              <Icon name="printer" className="h-4 w-4 text-amber-700" /> Print / Save PDF (Mufflers)
             </Button>
             <Button
               variant="secondary"
@@ -1469,33 +1527,92 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
                 })
               }
             >
-              <Icon name="printer" className="h-4 w-4 text-slate-700" /> Print All Sales
+              <Icon name="printer" className="h-4 w-4 text-slate-700" /> Print / Save PDF (All Sales)
             </Button>
           </div>
         </div>
       </Card>
 
+      {/* Active Shop Banner — shown when a specific department is selected */}
+      {departmentView !== "ALL" && (
+        <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${SHOP_PALETTES[departmentView].bannerClass}`}>
+          <Icon
+            name={departmentView === "TIRE" ? "tire" : "pipe"}
+            className={`h-4 w-4 shrink-0 ${SHOP_PALETTES[departmentView].textAccentClass}`}
+          />
+          <div className="flex-1">
+            <span className="font-bold text-sm">
+              {departmentView === "TIRE" ? "Tires Shop" : "Mufflers Shop"}
+            </span>
+            <span className="ml-2 text-xs opacity-75">
+              Showing only {departmentView === "TIRE" ? "tire shop" : "mufflers shop"} invoices and sales — excludes other department revenue
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDepartmentView("ALL")}
+            className="shrink-0 rounded-lg border border-current/20 bg-white/40 px-2.5 py-1 text-xs font-bold opacity-80 hover:opacity-100 transition"
+          >
+            View all departments
+          </button>
+        </div>
+      )}
+
       <DataState loading={salesQuery.isLoading} error={salesQuery.error}>
         {/* Department-Specific or Overall View */}
         {departmentView === "ALL" && (
           <div className="space-y-5">
-            {/* Top Summaries */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <StatTile label="Total Net Sales" value={money(overallTotals?.net ?? 0)} sub="Excludes sales tax" />
-              <StatTile label="Sales Tax Collected" value={money(overallTotals?.tax ?? 0)} sub="Remittance liability" />
-              <StatTile label="Gross Invoiced" value={money(overallTotals?.gross ?? 0)} sub="Total revenue" />
-              <StatTile label="Total Invoices" value={String(overallTotals?.count ?? 0)} sub={`${from} to ${to}`} />
+            {/* Top Summaries — Combined */}
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 shadow-xs">
+              <div className="mb-3 flex items-center gap-2">
+                <Icon name="store" className="h-4 w-4 text-indigo-600" />
+                <span className="font-bold text-indigo-900 text-sm">All Shops — Combined Totals</span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="rounded-lg bg-white border border-indigo-100 p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Cash Collected</span>
+                  <span className="font-bold font-mono text-lg text-emerald-800">
+                    {overallTotals?.cashCollected !== null && overallTotals?.cashCollected !== undefined
+                      ? money(overallTotals.cashCollected)
+                      : "—"}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block">{overallTotals?.paymentsCount ?? 0} payments (Cash Basis)</span>
+                </div>
+                <div className="rounded-lg bg-white border border-indigo-100 p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Gross Invoiced</span>
+                  <span className="font-bold font-mono text-lg text-indigo-950">{money(overallTotals?.gross ?? 0)}</span>
+                  <span className="text-[10px] text-slate-400 block">{overallTotals?.count ?? 0} tickets (Accrual)</span>
+                </div>
+                <div className="rounded-lg bg-white border border-indigo-100 p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Total Net Sales</span>
+                  <span className="font-bold font-mono text-lg text-indigo-900">{money(overallTotals?.net ?? 0)}</span>
+                  <span className="text-[10px] text-slate-400 block">Excludes sales tax</span>
+                </div>
+                <div className="rounded-lg bg-white border border-indigo-100 p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Sales Tax Tracked</span>
+                  <span className="font-bold font-mono text-lg text-indigo-700">{money(overallTotals?.tax ?? 0)}</span>
+                  <span className="text-[10px] text-slate-400 block">Remittance liability</span>
+                </div>
+                <div className="rounded-lg bg-white border border-indigo-100 p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Total Invoices</span>
+                  <span className="font-bold font-mono text-lg text-indigo-900">{overallTotals?.count ?? 0}</span>
+                  <span className="text-[10px] text-slate-400 block">{from} to {to}</span>
+                </div>
+              </div>
             </div>
 
             {/* Department Comparison Cards */}
             <div className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-5 shadow-2xs">
-                <div className="flex items-center justify-between border-b border-blue-200 pb-3">
+              {/* Tire Shop card */}
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-5 shadow-2xs">
+                <div className="flex items-center justify-between border-b border-emerald-200 pb-3">
                   <div className="flex items-center gap-2">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white font-bold">T</span>
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white">
+                      <Icon name="tire" className="h-4 w-4" />
+                    </span>
                     <div>
-                      <h3 className="font-bold text-blue-950">Tire Shop Performance</h3>
-                      <p className="text-xs text-blue-700">Tires, mount/balance, tire repairs &amp; hardware</p>
+                      <h3 className="font-bold text-emerald-950">Tire Shop</h3>
+                      <p className="text-xs text-emerald-700">Tires, mount/balance, repairs &amp; hardware</p>
                     </div>
                   </div>
                   <Button
@@ -1510,36 +1627,47 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
                       })
                     }
                   >
-                    <Icon name="printer" className="h-3.5 w-3.5 text-blue-600" /> Print
+                    <Icon name="printer" className="h-3.5 w-3.5 text-emerald-700" /> Print
                   </Button>
                 </div>
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  <div className="rounded-lg bg-white p-3 border border-blue-100">
+                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="rounded-lg bg-white p-3 border border-emerald-100">
+                    <span className="text-[11px] font-medium text-slate-500 block">Cash Collected</span>
+                    <span className="font-bold font-mono text-base text-emerald-800">
+                      {tireShop?.totals?.cashCollected !== null && tireShop?.totals?.cashCollected !== undefined
+                        ? money(tireShop.totals.cashCollected)
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="rounded-lg bg-white p-3 border border-emerald-100">
+                    <span className="text-[11px] font-medium text-slate-500 block">Gross Invoiced</span>
+                    <span className="font-bold font-mono text-base text-emerald-950">{money(tireShop?.totals?.gross ?? 0)}</span>
+                  </div>
+                  <div className="rounded-lg bg-white p-3 border border-emerald-100">
                     <span className="text-[11px] font-medium text-slate-500 block">Net Sales</span>
-                    <span className="font-bold font-mono text-base text-blue-950">{money(tireShop?.totals?.net ?? 0)}</span>
+                    <span className="font-bold font-mono text-base text-slate-700">{money(tireShop?.totals?.net ?? 0)}</span>
                   </div>
-                  <div className="rounded-lg bg-white p-3 border border-blue-100">
+                  <div className="rounded-lg bg-white p-3 border border-emerald-100">
                     <span className="text-[11px] font-medium text-slate-500 block">Sales Tax</span>
-                    <span className="font-bold font-mono text-base text-amber-700">{money(tireShop?.totals?.tax ?? 0)}</span>
-                  </div>
-                  <div className="rounded-lg bg-white p-3 border border-blue-100">
-                    <span className="text-[11px] font-medium text-slate-500 block">Gross Sales</span>
-                    <span className="font-bold font-mono text-base text-emerald-700">{money(tireShop?.totals?.gross ?? 0)}</span>
+                    <span className="font-bold font-mono text-base text-emerald-700">{money(tireShop?.totals?.tax ?? 0)}</span>
                   </div>
                 </div>
-                <div className="mt-3 flex items-center justify-between text-xs text-blue-900">
-                  <span>{tireShop?.totals?.invoiceCount ?? 0} Invoices</span>
-                  <span>{tireShop?.totals?.lineCount ?? 0} Itemized Tire Services</span>
+                <div className="mt-3 flex items-center justify-between text-xs text-emerald-900">
+                  <span className="font-semibold">{tireShop?.totals?.invoiceCount ?? 0} Invoices</span>
+                  <span>{tireShop?.totals?.lineCount ?? 0} Itemized Services</span>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-5 shadow-2xs">
-                <div className="flex items-center justify-between border-b border-amber-200 pb-3">
+              {/* Mufflers Shop card */}
+              <div className="rounded-xl border border-orange-200 bg-orange-50/50 p-5 shadow-2xs">
+                <div className="flex items-center justify-between border-b border-orange-200 pb-3">
                   <div className="flex items-center gap-2">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-600 text-white font-bold">M</span>
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-600 text-white">
+                      <Icon name="pipe" className="h-4 w-4" />
+                    </span>
                     <div>
-                      <h3 className="font-bold text-amber-950">Mufflers Shop Performance</h3>
-                      <p className="text-xs text-amber-700">Mufflers, exhausts, pipes, catalytic &amp; welding</p>
+                      <h3 className="font-bold text-orange-950">Mufflers Shop</h3>
+                      <p className="text-xs text-orange-700">Mufflers, exhausts, pipes, catalytic &amp; welding</p>
                     </div>
                   </div>
                   <Button
@@ -1554,32 +1682,40 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
                       })
                     }
                   >
-                    <Icon name="printer" className="h-3.5 w-3.5 text-amber-600" /> Print
+                    <Icon name="printer" className="h-3.5 w-3.5 text-orange-700" /> Print
                   </Button>
                 </div>
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  <div className="rounded-lg bg-white p-3 border border-amber-100">
+                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="rounded-lg bg-white p-3 border border-orange-100">
+                    <span className="text-[11px] font-medium text-slate-500 block">Cash Collected</span>
+                    <span className="font-bold font-mono text-base text-orange-800">
+                      {mufflersShop?.totals?.cashCollected !== null && mufflersShop?.totals?.cashCollected !== undefined
+                        ? money(mufflersShop.totals.cashCollected)
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="rounded-lg bg-white p-3 border border-orange-100">
+                    <span className="text-[11px] font-medium text-slate-500 block">Gross Invoiced</span>
+                    <span className="font-bold font-mono text-base text-orange-950">{money(mufflersShop?.totals?.gross ?? 0)}</span>
+                  </div>
+                  <div className="rounded-lg bg-white p-3 border border-orange-100">
                     <span className="text-[11px] font-medium text-slate-500 block">Net Sales</span>
-                    <span className="font-bold font-mono text-base text-amber-950">{money(mufflersShop?.totals?.net ?? 0)}</span>
+                    <span className="font-bold font-mono text-base text-slate-700">{money(mufflersShop?.totals?.net ?? 0)}</span>
                   </div>
-                  <div className="rounded-lg bg-white p-3 border border-amber-100">
+                  <div className="rounded-lg bg-white p-3 border border-orange-100">
                     <span className="text-[11px] font-medium text-slate-500 block">Sales Tax</span>
-                    <span className="font-bold font-mono text-base text-amber-700">{money(mufflersShop?.totals?.tax ?? 0)}</span>
-                  </div>
-                  <div className="rounded-lg bg-white p-3 border border-amber-100">
-                    <span className="text-[11px] font-medium text-slate-500 block">Gross Sales</span>
-                    <span className="font-bold font-mono text-base text-emerald-700">{money(mufflersShop?.totals?.gross ?? 0)}</span>
+                    <span className="font-bold font-mono text-base text-orange-700">{money(mufflersShop?.totals?.tax ?? 0)}</span>
                   </div>
                 </div>
-                <div className="mt-3 flex items-center justify-between text-xs text-amber-900">
-                  <span>{mufflersShop?.totals?.invoiceCount ?? 0} Invoices</span>
-                  <span>{mufflersShop?.totals?.lineCount ?? 0} Itemized Muffler Services</span>
+                <div className="mt-3 flex items-center justify-between text-xs text-orange-900">
+                  <span className="font-semibold">{mufflersShop?.totals?.invoiceCount ?? 0} Invoices</span>
+                  <span>{mufflersShop?.totals?.lineCount ?? 0} Itemized Services</span>
                 </div>
               </div>
             </div>
 
-            {/* Daily Chronological Summary */}
-            <Card title="Daily Sales Summary">
+            {/* Daily Chronological Summary — Combined */}
+            <Card title="All Shops — Daily Sales Summary">
               <Table headers={["Date", "Invoices", "Net Sales", "Sales Tax", "Gross Revenue"]}>
                 {data?.days?.map((d: any) => (
                   <tr key={d.date}>
@@ -1592,16 +1728,78 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
                 ))}
               </Table>
             </Card>
+
+            {/* Consolidated Invoices List */}
+            {data?.invoices && data.invoices.length > 0 && (
+              <Card title={`All Shops — Invoices & Receipts (${data.invoices.length})`}>
+                <Table headers={["Invoice #", "Customer", "Date", "Items & Services", "Total", ""]}>
+                  {data.invoices.map((inv: any) => (
+                    <tr key={inv.id}>
+                      <td className="px-3 py-2">
+                        <Link to={`/receipts/${inv.id}`} className="font-mono text-xs text-brand-700 font-bold hover:underline">
+                          {inv.number}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2 text-slate-800 font-medium">{inv.customer}</td>
+                      <td className="px-3 py-2 text-slate-500 text-xs font-mono">{dateOnly(inv.issuedAt)}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600 max-w-[260px] truncate">
+                        {inv.lines?.map((l: any) => `${l.quantity}x ${l.description}`).join(", ") || "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums font-mono font-bold text-slate-900">
+                        {money(inv.total)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <Link to={`/receipts/${inv.id}`} className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200">
+                          Receipt
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </Table>
+              </Card>
+            )}
           </div>
         )}
 
         {departmentView === "TIRE" && (
           <div className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <StatTile label="Tire Net Sales" value={money(tireShop?.totals?.net ?? 0)} sub="Pure sales volume" />
-              <StatTile label="Tire Sales Tax" value={money(tireShop?.totals?.tax ?? 0)} sub="Tax liability" />
-              <StatTile label="Tire Gross Revenue" value={money(tireShop?.totals?.gross ?? 0)} sub="Total received" />
-              <StatTile label="Tire Invoices" value={String(tireShop?.totals?.invoiceCount ?? 0)} sub={`${tireShop?.totals?.lineCount ?? 0} services rendered`} />
+            {/* Tire Shop banner */}
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-xs">
+              <div className="mb-3 flex items-center gap-2">
+                <Icon name="tire" className="h-4 w-4 text-emerald-700" />
+                <span className="font-bold text-emerald-900 text-sm">Tire Shop — Sales Detail</span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="rounded-lg bg-white border border-emerald-100 p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Cash Collected</span>
+                  <span className="font-bold font-mono text-lg text-emerald-800">
+                    {tireShop?.totals?.cashCollected !== null && tireShop?.totals?.cashCollected !== undefined
+                      ? money(tireShop.totals.cashCollected)
+                      : "—"}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block">{tireShop?.totals?.paymentsCount ?? 0} payments (Cash Basis)</span>
+                </div>
+                <div className="rounded-lg bg-white border border-emerald-100 p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Gross Invoiced</span>
+                  <span className="font-bold font-mono text-lg text-emerald-950">{money(tireShop?.totals?.gross ?? 0)}</span>
+                  <span className="text-[10px] text-slate-400 block">Total invoiced</span>
+                </div>
+                <div className="rounded-lg bg-white border border-emerald-100 p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Net Sales</span>
+                  <span className="font-bold font-mono text-lg text-emerald-900">{money(tireShop?.totals?.net ?? 0)}</span>
+                  <span className="text-[10px] text-slate-400 block">Excludes sales tax</span>
+                </div>
+                <div className="rounded-lg bg-white border border-emerald-100 p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Sales Tax</span>
+                  <span className="font-bold font-mono text-lg text-emerald-700">{money(tireShop?.totals?.tax ?? 0)}</span>
+                  <span className="text-[10px] text-slate-400 block">Tax liability</span>
+                </div>
+                <div className="rounded-lg bg-white border border-emerald-100 p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Invoices</span>
+                  <span className="font-bold font-mono text-lg text-emerald-900">{tireShop?.totals?.invoiceCount ?? 0}</span>
+                  <span className="text-[10px] text-slate-400 block">{tireShop?.totals?.lineCount ?? 0} services rendered</span>
+                </div>
+              </div>
             </div>
 
             {/* Tire Items / Services Breakdown */}
@@ -1643,7 +1841,7 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
                 {tireShop?.invoices?.map((inv: any) => (
                   <tr key={inv.id}>
                     <td className="px-3 py-2 text-xs text-slate-600">{dateOnly(inv.issuedAt)}</td>
-                    <td className="px-3 py-2 font-mono text-xs font-bold text-blue-700">{inv.number}</td>
+                    <td className="px-3 py-2 font-mono text-xs font-bold text-emerald-700">{inv.number}</td>
                     <td className="px-3 py-2 text-sm">{inv.customer}</td>
                     <td className="px-3 py-2 text-xs text-slate-600 max-w-xs">
                       {inv.lines.map((l: any) => `${l.quantity}x ${l.description}`).join(", ")}
@@ -1660,11 +1858,43 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
 
         {departmentView === "MUFFLER" && (
           <div className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <StatTile label="Mufflers Net Sales" value={money(mufflersShop?.totals?.net ?? 0)} sub="Pure sales volume" />
-              <StatTile label="Mufflers Sales Tax" value={money(mufflersShop?.totals?.tax ?? 0)} sub="Tax liability" />
-              <StatTile label="Mufflers Gross Revenue" value={money(mufflersShop?.totals?.gross ?? 0)} sub="Total received" />
-              <StatTile label="Muffler Invoices" value={String(mufflersShop?.totals?.invoiceCount ?? 0)} sub={`${mufflersShop?.totals?.lineCount ?? 0} services rendered`} />
+            {/* Mufflers Shop banner */}
+            <div className="rounded-xl border border-orange-200 bg-orange-50/40 p-4 shadow-xs">
+              <div className="mb-3 flex items-center gap-2">
+                <Icon name="pipe" className="h-4 w-4 text-orange-700" />
+                <span className="font-bold text-orange-900 text-sm">Mufflers Shop — Sales Detail</span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="rounded-lg bg-white border border-orange-100 p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Cash Collected</span>
+                  <span className="font-bold font-mono text-lg text-orange-800">
+                    {mufflersShop?.totals?.cashCollected !== null && mufflersShop?.totals?.cashCollected !== undefined
+                      ? money(mufflersShop.totals.cashCollected)
+                      : "—"}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block">{mufflersShop?.totals?.paymentsCount ?? 0} payments (Cash Basis)</span>
+                </div>
+                <div className="rounded-lg bg-white border border-orange-100 p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Gross Invoiced</span>
+                  <span className="font-bold font-mono text-lg text-orange-950">{money(mufflersShop?.totals?.gross ?? 0)}</span>
+                  <span className="text-[10px] text-slate-400 block">Total invoiced</span>
+                </div>
+                <div className="rounded-lg bg-white border border-orange-100 p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Net Sales</span>
+                  <span className="font-bold font-mono text-lg text-orange-900">{money(mufflersShop?.totals?.net ?? 0)}</span>
+                  <span className="text-[10px] text-slate-400 block">Excludes sales tax</span>
+                </div>
+                <div className="rounded-lg bg-white border border-orange-100 p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Sales Tax</span>
+                  <span className="font-bold font-mono text-lg text-orange-700">{money(mufflersShop?.totals?.tax ?? 0)}</span>
+                  <span className="text-[10px] text-slate-400 block">Tax liability</span>
+                </div>
+                <div className="rounded-lg bg-white border border-orange-100 p-3">
+                  <span className="text-[11px] font-medium text-slate-500 block">Invoices</span>
+                  <span className="font-bold font-mono text-lg text-orange-900">{mufflersShop?.totals?.invoiceCount ?? 0}</span>
+                  <span className="text-[10px] text-slate-400 block">{mufflersShop?.totals?.lineCount ?? 0} services rendered</span>
+                </div>
+              </div>
             </div>
 
             {/* Mufflers Items / Services Breakdown */}

@@ -362,7 +362,7 @@ export function WalkInModal({ onClose }: { onClose: () => void }) {
                 onClick={() => setDepartment("MUFFLER")}
                 className={`flex items-center justify-center gap-2 rounded-xl p-3 text-xs font-bold border transition ${
                   department === "MUFFLER"
-                    ? "border-blue-600 bg-blue-50 text-blue-950 ring-2 ring-blue-500/20 shadow-xs"
+                    ? "border-orange-500 bg-orange-50 text-orange-950 ring-2 ring-orange-500/20 shadow-xs"
                     : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                 }`}
               >

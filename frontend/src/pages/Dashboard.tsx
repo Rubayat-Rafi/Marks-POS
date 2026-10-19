@@ -11,6 +11,8 @@ import { WalkInModal } from "../components/WalkInModal";
 import { SwipeRow, type SwipeAction } from "../components/SwipeRow";
 import { Icon } from "../components/Icon";
 import { classifyTextDepartment } from "../lib/shopDepartment";
+import { SHOP_PALETTES } from "../lib/shopColors";
+import { DepartmentBadge } from "../components/DepartmentBadge";
 import type { BookingRequest, DashboardData, InServiceJob } from "../lib/types";
 
 /**
@@ -107,35 +109,35 @@ function CounterDashboard({ data, loading, error }: DashboardProps) {
           <button
             type="button"
             onClick={() => setShopFilter("ALL")}
-            className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+            className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
               shopFilter === "ALL"
-                ? "bg-slate-900 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                ? SHOP_PALETTES.ALL.activeTabClass
+                : SHOP_PALETTES.ALL.inactiveTabClass
             }`}
           >
-            All Shops
+            <Icon name="store" className="h-3.5 w-3.5" /> All Shops
           </button>
           <button
             type="button"
             onClick={() => setShopFilter("TIRE")}
             className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
               shopFilter === "TIRE"
-                ? "bg-emerald-600 text-white shadow-xs"
-                : "text-slate-600 hover:text-emerald-700 hover:bg-emerald-50"
+                ? SHOP_PALETTES.TIRE.activeTabClass
+                : SHOP_PALETTES.TIRE.inactiveTabClass
             }`}
           >
-            <span>🛞</span> Tires Shop
+            <Icon name="tire" className="h-3.5 w-3.5" /> Tires Shop
           </button>
           <button
             type="button"
             onClick={() => setShopFilter("MUFFLER")}
             className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
               shopFilter === "MUFFLER"
-                ? "bg-blue-600 text-white shadow-xs"
-                : "text-slate-600 hover:text-blue-700 hover:bg-blue-50"
+                ? SHOP_PALETTES.MUFFLER.activeTabClass
+                : SHOP_PALETTES.MUFFLER.inactiveTabClass
             }`}
           >
-            <span>🔧</span> Mufflers Shop
+            <Icon name="pipe" className="h-3.5 w-3.5" /> Mufflers Shop
           </button>
         </div>
       </div>
@@ -144,10 +146,18 @@ function CounterDashboard({ data, loading, error }: DashboardProps) {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 mt-2">
         {(can("sales.quick") || can("payments.collect")) && (
           <ActionTile
-            to="/quick-sale"
+            to={shopFilter === "ALL" ? "/quick-sale" : `/quick-sale?shop=${shopFilter.toLowerCase()}`}
             icon="cash"
             title="Quick Sale / POS"
-            sub={collectable.length > 0 ? `${collectable.length} ready to collect` : "Counter sales (Both Shops)"}
+            sub={
+              collectable.length > 0
+                ? `${collectable.length} ready to collect`
+                : shopFilter === "TIRE"
+                ? "Tires Counter sales"
+                : shopFilter === "MUFFLER"
+                ? "Mufflers Counter sales"
+                : "Counter sales (Both Shops)"
+            }
             primary
           />
         )}
@@ -155,10 +165,32 @@ function CounterDashboard({ data, loading, error }: DashboardProps) {
           <ActionTile onClick={() => setWalkIn(true)} icon="plus" title="Check in a car" sub="Walk-in" />
         )}
         {can("inventory.receive") && (
-          <ActionTile to="/inventory" icon="box" title="Inventory" sub="Tires & mufflers" />
+          <ActionTile
+            to={shopFilter === "ALL" ? "/inventory" : `/inventory?kind=${shopFilter}`}
+            icon="box"
+            title="Inventory"
+            sub={
+              shopFilter === "TIRE"
+                ? "Tires & wheels inventory"
+                : shopFilter === "MUFFLER"
+                ? "Exhaust & mufflers inventory"
+                : "Tires & mufflers"
+            }
+          />
         )}
         {can("reports.sales") && (
-          <ActionTile to="/reports" icon="receipt" title="Reports" sub="Separate Revenue Breakdown" />
+          <ActionTile
+            to={shopFilter === "ALL" ? "/reports" : `/reports?shop=${shopFilter.toLowerCase()}`}
+            icon="receipt"
+            title="Reports"
+            sub={
+              shopFilter === "TIRE"
+                ? "Tires Shop Reports"
+                : shopFilter === "MUFFLER"
+                ? "Mufflers Shop Reports"
+                : "Separate Revenue Breakdown"
+            }
+          />
         )}
       </div>
       {walkIn && <WalkInModal onClose={() => setWalkIn(false)} />}
@@ -166,127 +198,209 @@ function CounterDashboard({ data, loading, error }: DashboardProps) {
       <DataState loading={loading} error={error}>
         {data && (
           <>
-            {/* Main Revenue & Metrics Dashboard with Separate Shop Cards */}
-            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {/* Card 1: Today's Revenue */}
-              {data.cashCollectedToday !== null ? (
-                <StatTile
-                  label={
-                    shopFilter === "TIRE"
-                      ? "Tires Today's Revenue"
-                      : shopFilter === "MUFFLER"
-                      ? "Mufflers Today's Revenue"
-                      : "Today's Total Revenue"
-                  }
-                  value={money(
-                    shopFilter === "TIRE"
-                      ? (tireRev?.revenue ?? 0)
-                      : shopFilter === "MUFFLER"
-                      ? (mufflerRev?.revenue ?? 0)
-                      : (data.cashCollectedToday ?? 0)
-                  )}
-                  sub={
-                    shopFilter === "TIRE"
-                      ? `${tireRev?.paymentsCount ?? 0} tire payment(s) today • 30d: ${money(sales.data?.tireShop?.totals?.net ?? 0)}`
-                      : shopFilter === "MUFFLER"
-                      ? `${mufflerRev?.paymentsCount ?? 0} muffler payment(s) today • 30d: ${money(sales.data?.mufflersShop?.totals?.net ?? 0)}`
-                      : `${data.paymentsToday} payment(s) today • 30d: ${money(sales.data?.totals?.net ?? 0)}`
-                  }
-                  tone="good"
-                />
-              ) : (
-                <StatTile label="Payments today" value={String(data.paymentsToday)} sub="Amounts restricted for your role" />
-              )}
-
-              {/* Card 2: Tires Shop Revenue & Invoiced */}
+            {/* Active filter banner when a specific shop is selected */}
+            {shopFilter !== "ALL" && (
               <div
-                onClick={() => setShopFilter(shopFilter === "TIRE" ? "ALL" : "TIRE")}
-                className={`cursor-pointer rounded-2xl border p-4 transition ${
+                className={`mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-4 py-2.5 ${
                   shopFilter === "TIRE"
-                    ? "border-emerald-500 bg-emerald-50/70 shadow-sm ring-2 ring-emerald-500/20"
-                    : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/30"
+                    ? SHOP_PALETTES.TIRE.bannerClass
+                    : SHOP_PALETTES.MUFFLER.bannerClass
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-emerald-800">
-                    <span>🛞</span> Tires Shop
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-black uppercase tracking-wider ${
+                      shopFilter === "TIRE"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-orange-600 text-white shadow-xs"
+                    }`}
+                  >
+                    <span>{shopFilter === "TIRE" ? "🛞" : "🔧"}</span>
+                    {shopFilter === "TIRE" ? "Tires Shop Only" : "Mufflers Shop Only"}
                   </span>
-                  <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[11px] font-extrabold text-emerald-800">
-                    {tireRev?.paymentsCount ?? 0} today
+                  <span className="text-xs font-medium text-slate-600">
+                    Showing metrics, bays, and appointments exclusively for {shopFilter === "TIRE" ? "Tires Shop" : "Mufflers Shop"}.
                   </span>
                 </div>
-                <div className="mt-2 flex items-baseline justify-between">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Today's Revenue</span>
-                    <p className="text-2xl font-black tabular-nums text-slate-900">
-                      {tireRev?.revenue !== null ? money(tireRev?.revenue ?? 0) : "—"}
+                <button
+                  type="button"
+                  onClick={() => setShopFilter("ALL")}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                    shopFilter === "TIRE"
+                      ? "text-emerald-800 hover:bg-emerald-100/60"
+                      : "text-orange-900 hover:bg-orange-100/60"
+                  }`}
+                >
+                  ✕ Show All Shops (Combined)
+                </button>
+              </div>
+            )}
+
+            {/* Main Revenue & Metrics Dashboard */}
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {shopFilter === "ALL" ? (
+                <>
+                  {/* ALL SHOPS CARD 1: Today's Total Revenue (Combined) */}
+                  {data.cashCollectedToday !== null ? (
+                    <StatTile
+                      label="Today's Total Revenue"
+                      value={money(data.cashCollectedToday ?? 0)}
+                      sub={`${data.paymentsToday} payment(s) today • 30d: ${money(sales.data?.totals?.net ?? 0)}`}
+                      tone="good"
+                    />
+                  ) : (
+                    <StatTile label="Payments today" value={String(data.paymentsToday)} sub="Amounts restricted for your role" />
+                  )}
+
+                  {/* ALL SHOPS CARD 2: Tires Shop Breakdown (clickable) */}
+                  <div
+                    onClick={() => setShopFilter("TIRE")}
+                    className="cursor-pointer rounded-2xl border border-emerald-200/90 bg-gradient-to-b from-emerald-50/40 to-white p-4 transition hover:border-emerald-400 hover:shadow-md hover:shadow-emerald-600/10 shadow-xs"
+                    title="Click to view Tires Shop only"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-emerald-800">
+                        <span>🛞</span> Tires Shop
+                      </span>
+                      <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[11px] font-extrabold text-emerald-800">
+                        {tireRev?.paymentsCount ?? 0} today
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-baseline justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Today's Revenue</span>
+                        <p className="text-2xl font-black tabular-nums text-slate-900">
+                          {tireRev?.revenue !== null ? money(tireRev?.revenue ?? 0) : "—"}
+                        </p>
+                      </div>
+                      {sales.data?.tireShop && (
+                        <div className="text-right">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">30d Sales</span>
+                          <p className="text-sm font-extrabold tabular-nums text-emerald-700">
+                            {money(sales.data.tireShop.totals.net)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    <p className="mt-1.5 pt-1.5 border-t border-emerald-100 text-xs text-slate-500 flex items-center justify-between">
+                      <span>Invoiced today: <strong className="font-semibold text-slate-700">{tireRev?.invoiced !== null ? money(tireRev?.invoiced ?? 0) : "—"}</strong> ({tireRev?.invoicedCount ?? 0} inv)</span>
+                      <span className="text-[10px] font-bold text-emerald-700 underline">Isolate →</span>
                     </p>
                   </div>
-                  {sales.data?.tireShop && (
-                    <div className="text-right">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">30d Sales</span>
-                      <p className="text-sm font-extrabold tabular-nums text-emerald-700">
-                        {money(sales.data.tireShop.totals.net)}
-                      </p>
-                    </div>
-                  )}
-                </div>
-                <p className="mt-1.5 pt-1.5 border-t border-slate-100 text-xs text-slate-500 flex items-center justify-between">
-                  <span>Invoiced today: <strong className="font-semibold text-slate-700">{tireRev?.invoiced !== null ? money(tireRev?.invoiced ?? 0) : "—"}</strong> ({tireRev?.invoicedCount ?? 0} inv)</span>
-                </p>
-              </div>
 
-              {/* Card 3: Mufflers Shop Revenue & Invoiced */}
-              <div
-                onClick={() => setShopFilter(shopFilter === "MUFFLER" ? "ALL" : "MUFFLER")}
-                className={`cursor-pointer rounded-2xl border p-4 transition ${
-                  shopFilter === "MUFFLER"
-                    ? "border-blue-500 bg-blue-50/70 shadow-sm ring-2 ring-blue-500/20"
-                    : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/30"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-blue-800">
-                    <span>🔧</span> Mufflers Shop
-                  </span>
-                  <span className="rounded-md bg-blue-100 px-2 py-0.5 text-[11px] font-extrabold text-blue-800">
-                    {mufflerRev?.paymentsCount ?? 0} today
-                  </span>
-                </div>
-                <div className="mt-2 flex items-baseline justify-between">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Today's Revenue</span>
-                    <p className="text-2xl font-black tabular-nums text-slate-900">
-                      {mufflerRev?.revenue !== null ? money(mufflerRev?.revenue ?? 0) : "—"}
+                  {/* ALL SHOPS CARD 3: Mufflers Shop Breakdown (clickable) */}
+                  <div
+                    onClick={() => setShopFilter("MUFFLER")}
+                    className="cursor-pointer rounded-2xl border border-orange-200/90 bg-gradient-to-b from-orange-50/40 to-white p-4 transition hover:border-orange-400 hover:shadow-md hover:shadow-orange-600/10 shadow-xs"
+                    title="Click to view Mufflers Shop only"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-orange-900">
+                        <span>🔧</span> Mufflers Shop
+                      </span>
+                      <span className="rounded-md bg-orange-100 px-2 py-0.5 text-[11px] font-extrabold text-orange-900">
+                        {mufflerRev?.paymentsCount ?? 0} today
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-baseline justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Today's Revenue</span>
+                        <p className="text-2xl font-black tabular-nums text-slate-900">
+                          {mufflerRev?.revenue !== null ? money(mufflerRev?.revenue ?? 0) : "—"}
+                        </p>
+                      </div>
+                      {sales.data?.mufflersShop && (
+                        <div className="text-right">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">30d Sales</span>
+                          <p className="text-sm font-extrabold tabular-nums text-orange-700">
+                            {money(sales.data.mufflersShop.totals.net)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    <p className="mt-1.5 pt-1.5 border-t border-orange-100 text-xs text-slate-500 flex items-center justify-between">
+                      <span>Invoiced today: <strong className="font-semibold text-slate-700">{mufflerRev?.invoiced !== null ? money(mufflerRev?.invoiced ?? 0) : "—"}</strong> ({mufflerRev?.invoicedCount ?? 0} inv)</span>
+                      <span className="text-[10px] font-bold text-orange-700 underline">Isolate →</span>
                     </p>
                   </div>
-                  {sales.data?.mufflersShop && (
-                    <div className="text-right">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">30d Sales</span>
-                      <p className="text-sm font-extrabold tabular-nums text-blue-700">
-                        {money(sales.data.mufflersShop.totals.net)}
-                      </p>
-                    </div>
-                  )}
-                </div>
-                <p className="mt-1.5 pt-1.5 border-t border-slate-100 text-xs text-slate-500 flex items-center justify-between">
-                  <span>Invoiced today: <strong className="font-semibold text-slate-700">{mufflerRev?.invoiced !== null ? money(mufflerRev?.invoiced ?? 0) : "—"}</strong> ({mufflerRev?.invoicedCount ?? 0} inv)</span>
-                </p>
-              </div>
 
-              {/* Card 4: In the bays / Status */}
-              <StatTile
-                label={shopFilter === "ALL" ? "In the bays" : `${shopFilter === "TIRE" ? "Tires" : "Mufflers"} in bays`}
-                value={data.bayCount ? `${filteredInService.length} / ${data.bayCount}` : String(filteredInService.length)}
-                sub={
-                  shopFilter === "ALL"
-                    ? (filteredInService.length === 0 ? "No cars in the shop" : "Vehicles in service")
-                    : `${filteredInService.length} vehicle(s) for ${shopFilter === "TIRE" ? "Tires" : "Mufflers"}`
-                }
-              />
+                  {/* ALL SHOPS CARD 4: Combined In The Bays */}
+                  <StatTile
+                    label="Cars in the bays"
+                    value={`${filteredInService.length} vehicle(s)`}
+                    sub={
+                      filteredInService.length === 0
+                        ? "No cars in the shop"
+                        : `${filteredInService.filter((j) => (j.department ?? classifyTextDepartment(j.concern, j.number || j.id)) === "TIRE").length} Tires · ${filteredInService.filter((j) => (j.department ?? classifyTextDepartment(j.concern, j.number || j.id)) === "MUFFLER").length} Mufflers`
+                    }
+                  />
+                </>
+              ) : shopFilter === "TIRE" ? (
+                <>
+                  {/* TIRES ONLY CARD 1: Tires Today's Revenue */}
+                  <StatTile
+                    label="🛞 Tires Today's Revenue"
+                    value={tireRev?.revenue !== null ? money(tireRev?.revenue ?? 0) : "—"}
+                    sub={`${tireRev?.paymentsCount ?? 0} tire payment(s) today`}
+                    tone="good"
+                  />
+
+                  {/* TIRES ONLY CARD 2: Tires Invoiced Today */}
+                  <StatTile
+                    label="🛞 Tires Invoiced Today"
+                    value={tireRev?.invoiced !== null ? money(tireRev?.invoiced ?? 0) : "—"}
+                    sub={`${tireRev?.invoicedCount ?? 0} invoice(s) generated today`}
+                  />
+
+                  {/* TIRES ONLY CARD 3: Tires 30-Day Net Sales */}
+                  <StatTile
+                    label="🛞 Tires 30-Day Sales"
+                    value={sales.data?.tireShop ? money(sales.data.tireShop.totals.net) : "—"}
+                    sub={`${sales.data?.tireShop?.totals?.invoiceCount ?? 0} invoices (excl. sales tax)`}
+                  />
+
+                  {/* TIRES ONLY CARD 4: Tires In The Bays */}
+                  <StatTile
+                    label="🛞 Tires in the bays"
+                    value={`${filteredInService.length} vehicle(s)`}
+                    sub="Active tire service jobs"
+                  />
+                </>
+              ) : (
+                <>
+                  {/* MUFFLERS ONLY CARD 1: Mufflers Today's Revenue */}
+                  <StatTile
+                    label="🔧 Mufflers Today's Revenue"
+                    value={mufflerRev?.revenue !== null ? money(mufflerRev?.revenue ?? 0) : "—"}
+                    sub={`${mufflerRev?.paymentsCount ?? 0} muffler payment(s) today`}
+                    tone="good"
+                  />
+
+                  {/* MUFFLERS ONLY CARD 2: Mufflers Invoiced Today */}
+                  <StatTile
+                    label="🔧 Mufflers Invoiced Today"
+                    value={mufflerRev?.invoiced !== null ? money(mufflerRev?.invoiced ?? 0) : "—"}
+                    sub={`${mufflerRev?.invoicedCount ?? 0} invoice(s) generated today`}
+                  />
+
+                  {/* MUFFLERS ONLY CARD 3: Mufflers 30-Day Net Sales */}
+                  <StatTile
+                    label="🔧 Mufflers 30-Day Sales"
+                    value={sales.data?.mufflersShop ? money(sales.data.mufflersShop.totals.net) : "—"}
+                    sub={`${sales.data?.mufflersShop?.totals?.invoiceCount ?? 0} invoices (excl. sales tax)`}
+                  />
+
+                  {/* MUFFLERS ONLY CARD 4: Mufflers In The Bays */}
+                  <StatTile
+                    label="🔧 Mufflers in the bays"
+                    value={`${filteredInService.length} vehicle(s)`}
+                    sub="Active muffler service jobs"
+                  />
+                </>
+              )}
             </div>
 
-            <Alerts data={data} />
+            <Alerts data={data} shopFilter={shopFilter} />
 
             <div className="mt-5 grid gap-5 xl:grid-cols-[1.35fr_1fr] [&>*]:min-w-0">
               <Card
@@ -316,7 +430,7 @@ function CounterDashboard({ data, loading, error }: DashboardProps) {
                   emptyMessage={
                     shopFilter === "ALL"
                       ? "No cars checked in right now."
-                      : `No ${shopFilter === "TIRE" ? "Tire" : "Muffler"} cars checked in right now.`
+                      : `No ${shopFilter === "TIRE" ? "Tires" : "Mufflers"} Shop cars checked in right now.`
                   }
                 >
                   <p className="mb-3 text-xs text-slate-500 sm:hidden">Swipe a car left to collect or open it.</p>
@@ -331,8 +445,18 @@ function CounterDashboard({ data, loading, error }: DashboardProps) {
               </Card>
 
               <div className="min-w-0 space-y-5">
-                {(data.newBookingRequests ?? 0) > 0 && can("bookings.read") && <BookingRequests />}
-                <AppointmentsCard appointments={filteredAppointments} totalRequests={data.newBookingRequests} />
+                {can("bookings.read") && <BookingRequests shopFilter={shopFilter} />}
+                <AppointmentsCard
+                  appointments={filteredAppointments}
+                  totalRequests={
+                    shopFilter === "TIRE"
+                      ? data.newBookingRequestsByShop?.tireShop ?? data.newBookingRequests
+                      : shopFilter === "MUFFLER"
+                      ? data.newBookingRequestsByShop?.mufflersShop ?? data.newBookingRequests
+                      : data.newBookingRequests
+                  }
+                  shopFilter={shopFilter}
+                />
               </div>
             </div>
 
@@ -470,38 +594,70 @@ function ActionTile({
   );
 }
 
-function Alerts({ data }: { data: DashboardData }) {
+function Alerts({
+  data,
+  shopFilter = "ALL",
+}: {
+  data: DashboardData;
+  shopFilter?: "ALL" | "TIRE" | "MUFFLER";
+}) {
   const { can } = useAuth();
   const items: Array<{ icon: string; text: React.ReactNode; to: string; cta: string; tone: string }> = [];
 
-  if ((data.lowStockCount ?? 0) > 0) {
+  const lowStock =
+    shopFilter === "TIRE"
+      ? data.lowStockCountByShop?.tireShop ?? data.lowStockCount ?? 0
+      : shopFilter === "MUFFLER"
+      ? data.lowStockCountByShop?.mufflersShop ?? data.lowStockCount ?? 0
+      : data.lowStockCount ?? 0;
+
+  if (lowStock > 0) {
     items.push({
       icon: "box",
       tone: "border-amber-200 bg-amber-50 text-amber-900",
       text: (
         <>
-          <strong>{data.lowStockCount} item{data.lowStockCount === 1 ? "" : "s"}</strong> at or below the reorder
-          point. Time to order more tires or mufflers.
+          <strong>
+            {lowStock} {shopFilter === "TIRE" ? "tire" : shopFilter === "MUFFLER" ? "muffler" : ""} item
+            {lowStock === 1 ? "" : "s"}
+          </strong>{" "}
+          at or below the reorder point. Time to order more{" "}
+          {shopFilter === "TIRE" ? "tires." : shopFilter === "MUFFLER" ? "mufflers." : "tires or mufflers."}
         </>
       ),
-      to: "/inventory?view=low",
+      to: shopFilter === "ALL" ? "/inventory?view=low" : `/inventory?view=low&kind=${shopFilter}`,
       cta: "See what to reorder",
     });
   }
-  if ((data.newBookingRequests ?? 0) > 0 && can("bookings.read")) {
+
+  const bookingReqCount =
+    shopFilter === "TIRE"
+      ? data.newBookingRequestsByShop?.tireShop ?? data.newBookingRequests ?? 0
+      : shopFilter === "MUFFLER"
+      ? data.newBookingRequestsByShop?.mufflersShop ?? data.newBookingRequests ?? 0
+      : data.newBookingRequests ?? 0;
+
+  if (bookingReqCount > 0 && can("bookings.read")) {
     items.push({
       icon: "calendar",
       tone: "border-brand-200 bg-brand-50 text-brand-950 shadow-xs",
       text: (
         <>
-          <strong>{data.newBookingRequests} website booking request{data.newBookingRequests === 1 ? "" : "s"}</strong> received online. Call to confirm or add directly to the appointment calendar.
+          <strong>
+            {bookingReqCount} {shopFilter === "TIRE" ? "Tires Shop" : shopFilter === "MUFFLER" ? "Mufflers Shop" : "website"}{" "}
+            booking request{bookingReqCount === 1 ? "" : "s"}
+          </strong>{" "}
+          received online. Call to confirm or add directly to the appointment calendar.
         </>
       ),
-      to: "/appointments?tab=requests",
+      to:
+        shopFilter === "ALL"
+          ? "/appointments?tab=requests"
+          : `/appointments?tab=requests&shop=${shopFilter.toLowerCase()}`,
       cta: "Review requests",
     });
   }
-  if (data.openReconciliationItems > 0 && can("finance.reconcile")) {
+  if (shopFilter === "ALL" && data.openReconciliationItems > 0 && can("finance.reconcile")) {
     items.push({
       icon: "alert",
       tone: "border-slate-200 bg-white text-ink",
@@ -562,21 +718,7 @@ function BayRow({
             <p className="truncate font-semibold text-ink">{vehicleLabel(job.vehicle)}</p>
             {(() => {
               const dept = job.department ?? classifyTextDepartment(job.concern, job.number || job.id);
-              if (dept === "TIRE") {
-                return (
-                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                    🛞 Tires
-                  </span>
-                );
-              }
-              if (dept === "MUFFLER") {
-                return (
-                  <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
-                    🔧 Mufflers
-                  </span>
-                );
-              }
-              return null;
+              return <DepartmentBadge department={dept} size="xs" />;
             })()}
           </div>
           <p className="truncate text-xs text-slate-500">
@@ -597,7 +739,7 @@ function BayRow({
   );
 }
 
-function BookingRequests() {
+function BookingRequests({ shopFilter = "ALL" }: { shopFilter?: "ALL" | "TIRE" | "MUFFLER" }) {
   const queryClient = useQueryClient();
   const requests = useQuery({
     queryKey: ["booking-requests"],
@@ -623,68 +765,96 @@ function BookingRequests() {
     },
   });
 
+  const allRequests = requests.data?.data ?? [];
+  const filteredRequests = useMemo(() => {
+    if (shopFilter === "ALL") return allRequests;
+    return allRequests.filter(
+      (r) => classifyTextDepartment(`${r.service} ${r.notes || ""}`, r.id) === shopFilter,
+    );
+  }, [allRequests, shopFilter]);
+
+  if (shopFilter !== "ALL" && filteredRequests.length === 0 && !requests.isLoading) {
+    return null;
+  }
+
   return (
     <Card
-      title="Website booking requests"
+      title={`Website booking requests ${shopFilter === "ALL" ? "" : shopFilter === "TIRE" ? "(Tires Shop)" : "(Mufflers Shop)"}`}
       action={
-        <Link to="/appointments?tab=requests" className="text-xs font-semibold text-brand-600 hover:underline">
+        <Link
+          to={shopFilter === "ALL" ? "/appointments?tab=requests" : `/appointments?tab=requests&shop=${shopFilter.toLowerCase()}`}
+          className="text-xs font-semibold text-brand-600 hover:underline"
+        >
           View all requests →
         </Link>
       }
     >
-      <DataState loading={requests.isLoading} error={requests.error} empty={requests.data?.data.length === 0} emptyMessage="All caught up.">
+      <DataState
+        loading={requests.isLoading}
+        error={requests.error}
+        empty={filteredRequests.length === 0}
+        emptyMessage={shopFilter === "ALL" ? "All caught up." : `No pending ${shopFilter === "TIRE" ? "Tires" : "Mufflers"} Shop requests.`}
+      >
         <ul className="divide-y divide-slate-100">
-          {requests.data?.data.map((r) => (
-            <li key={r.id} className="py-3 first:pt-0 last:pb-0">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-semibold text-ink">
-                    {r.name} <span className="font-normal text-slate-500">· {r.service}</span>
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {[r.vehicle, r.preferredDate && `wants ${dateOnly(r.preferredDate)}`, r.preferredTime]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </p>
-                  {r.notes && <p className="mt-1 text-sm text-slate-600 italic">“{r.notes}”</p>}
+          {filteredRequests.map((r) => {
+            const dept = classifyTextDepartment(`${r.service} ${r.notes || ""}`, r.id);
+            return (
+              <li key={r.id} className="py-3 first:pt-0 last:pb-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-ink">
+                        {r.name} <span className="font-normal text-slate-500">· {r.service}</span>
+                      </p>
+                      {shopFilter === "ALL" && (
+                        <DepartmentBadge department={dept} size="xs" />
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {[r.vehicle, r.preferredDate && `wants ${dateOnly(r.preferredDate)}`, r.preferredTime]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                    {r.notes && <p className="mt-1 text-sm text-slate-600 italic">“{r.notes}”</p>}
+                  </div>
+                  <StatusBadge status={r.status === "NEW" ? "PENDING" : r.status} />
                 </div>
-                <StatusBadge status={r.status === "NEW" ? "PENDING" : r.status} />
-              </div>
-              <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => convert.mutate(r.id)}
-                  disabled={convert.isPending}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition"
-                >
-                  <Icon name="check" className="h-3.5 w-3.5" />
-                  <span>{convert.isPending ? "Booking..." : "Book to Calendar"}</span>
-                </button>
-                <a
-                  href={`tel:${r.phone.replace(/[^\d+]/g, "")}`}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 transition"
-                >
-                  <Icon name="phone" className="h-3.5 w-3.5" /> {r.phone}
-                </a>
-                {r.status === "NEW" && (
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => update.mutate({ id: r.id, status: "CONTACTED" })}
-                    className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    onClick={() => convert.mutate(r.id)}
+                    disabled={convert.isPending}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition"
                   >
-                    Mark Contacted
+                    <Icon name="check" className="h-3.5 w-3.5" />
+                    <span>{convert.isPending ? "Booking..." : "Book to Calendar"}</span>
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => update.mutate({ id: r.id, status: "CLOSED" })}
-                  className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-400 hover:text-red-600"
-                >
-                  Dismiss
-                </button>
-              </div>
-            </li>
-          ))}
+                  <a
+                    href={`tel:${r.phone.replace(/[^\d+]/g, "")}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 transition"
+                  >
+                    <Icon name="phone" className="h-3.5 w-3.5" /> {r.phone}
+                  </a>
+                  {r.status === "NEW" && (
+                    <button
+                      type="button"
+                      onClick={() => update.mutate({ id: r.id, status: "CONTACTED" })}
+                      className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Mark Contacted
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => update.mutate({ id: r.id, status: "CLOSED" })}
+                    className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-400 hover:text-red-600"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </DataState>
     </Card>
@@ -694,15 +864,20 @@ function BookingRequests() {
 function AppointmentsCard({
   appointments,
   totalRequests,
+  shopFilter = "ALL",
 }: {
   appointments: DashboardData["appointmentsToday"];
   totalRequests?: number | null;
+  shopFilter?: "ALL" | "TIRE" | "MUFFLER";
 }) {
   return (
     <Card
-      title="Today's appointments"
+      title={`Today's appointments ${shopFilter === "ALL" ? "" : shopFilter === "TIRE" ? "(Tires Shop)" : "(Mufflers Shop)"}`}
       action={
-        <Link to="/appointments" className="text-sm font-semibold text-brand-600 hover:underline">
+        <Link
+          to={shopFilter === "ALL" ? "/appointments" : `/appointments?shop=${shopFilter.toLowerCase()}`}
+          className="text-sm font-semibold text-brand-600 hover:underline"
+        >
           All
         </Link>
       }
@@ -713,14 +888,30 @@ function AppointmentsCard({
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-600 text-[10px] font-bold text-white">
               {totalRequests}
             </span>
-            <span>Online booking request(s) waiting for review</span>
+            <span>
+              {shopFilter === "TIRE"
+                ? "Tires Shop booking request(s) waiting for review"
+                : shopFilter === "MUFFLER"
+                ? "Mufflers Shop booking request(s) waiting for review"
+                : "Online booking request(s) waiting for review"}
+            </span>
           </span>
-          <Link to="/appointments?tab=requests" className="font-bold underline hover:text-brand-700">
+          <Link
+            to={shopFilter === "ALL" ? "/appointments?tab=requests" : `/appointments?tab=requests&shop=${shopFilter.toLowerCase()}`}
+            className="font-bold underline hover:text-brand-700"
+          >
             Review
           </Link>
         </div>
       )}
-      <DataState empty={appointments.length === 0} emptyMessage="No appointments booked for today.">
+      <DataState
+        empty={appointments.length === 0}
+        emptyMessage={
+          shopFilter === "ALL"
+            ? "No appointments booked for today."
+            : `No ${shopFilter === "TIRE" ? "Tires" : "Mufflers"} Shop appointments booked for today.`
+        }
+      >
         <ul className="divide-y divide-slate-100">
           {appointments.map((appt) => {
             const dept = appt.department ?? classifyTextDepartment(appt.concern, appt.id);
@@ -730,15 +921,8 @@ function AppointmentsCard({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="truncate text-sm font-semibold">{customerLabel(appt.customer)}</p>
-                    {dept === "TIRE" && (
-                      <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                        🛞 Tires
-                      </span>
-                    )}
-                    {dept === "MUFFLER" && (
-                      <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
-                        🔧 Mufflers
-                      </span>
+                    {shopFilter === "ALL" && (
+                      <DepartmentBadge department={dept} size="xs" />
                     )}
                   </div>
                   <p className="truncate text-xs text-slate-500">
