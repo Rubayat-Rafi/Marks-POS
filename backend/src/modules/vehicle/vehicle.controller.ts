@@ -5,6 +5,7 @@ import { db } from "../../db.js";
 import { ApiError } from "../../middlewares/error.middleware.js";
 import { auth, tenantScope } from "../../middlewares/auth.middleware.js";
 import { auditContext, recordAudit } from "../../lib/audit.js";
+import { deleteVehicleTx } from "../../domain/deletion.js";
 
 export const vehicleSchema = z.object({
   customerId: z.string().uuid().optional(),
@@ -368,4 +369,26 @@ export async function getReferenceModels(req: Request, res: Response) {
       warning: "The vehicle reference service is unavailable right now. Type the model manually.",
     });
   }
+}
+
+export async function deleteVehicle(req: Request, res: Response) {
+  const ctx = auth(req);
+  const existing = await db.vehicle.findFirst({
+    where: { id: req.params.id, ...tenantScope(req) },
+  });
+  if (!existing) throw ApiError.notFound("Vehicle not found.");
+
+  await db.$transaction(async (tx) => {
+    await deleteVehicleTx(tx, ctx.organizationId, existing.id);
+    await recordAudit(tx, {
+      organizationId: ctx.organizationId,
+      ...auditContext(req),
+      action: "vehicle.deleted",
+      resourceType: "vehicle",
+      resourceId: existing.id,
+      metadata: { year: existing.year, make: existing.make, model: existing.model, vin: existing.vin },
+    });
+  });
+
+  res.json({ success: true });
 }

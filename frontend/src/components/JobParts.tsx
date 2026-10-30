@@ -103,6 +103,11 @@ export function JobParts({
     onSuccess: refresh,
   });
 
+  const deletePart = useMutation({
+    mutationFn: (usageId: string) => api.delete(`/repair-orders/parts/${usageId}`),
+    onSuccess: refresh,
+  });
+
   const pick = (itemId: string) => {
     const item = catalog.data?.data.find((c) => c.id === itemId);
     if (!item) {
@@ -127,6 +132,7 @@ export function JobParts({
     <div className="space-y-3">
       <ErrorBanner error={add.error} />
       <ErrorBanner error={returnPart.error} />
+      <ErrorBanner error={deletePart.error} />
 
       <DataState
         empty={usages.length === 0}
@@ -157,19 +163,32 @@ export function JobParts({
                 </td>
               )}
               <td className="px-3 py-2 text-right">
-                {u.returned ? (
-                  <span className="text-xs text-slate-500">returned</span>
-                ) : (
-                  can("jobs.write") && (
+                <div className="flex items-center justify-end gap-1.5">
+                  {u.returned ? (
+                    <span className="text-xs text-slate-500">returned</span>
+                  ) : (
+                    can("jobs.write") && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        loading={returnPart.isPending}
+                        onClick={() => returnPart.mutate(u.id)}
+                      >
+                        Return
+                      </Button>
+                    )
+                  )}
+                  {can("jobs.write") && (
                     <Button
-                      variant="secondary"
-                      loading={returnPart.isPending}
-                      onClick={() => returnPart.mutate(u.id)}
+                      variant="danger"
+                      size="sm"
+                      loading={deletePart.isPending}
+                      onClick={() => deletePart.mutate(u.id)}
                     >
-                      Return
+                      Delete
                     </Button>
-                  )
-                )}
+                  )}
+                </div>
               </td>
             </tr>
           ))}

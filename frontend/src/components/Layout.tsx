@@ -26,7 +26,7 @@ const NAV: NavItem[] = [
   { to: "/timeclock", label: "Time clock", icon: "clock", permission: "timeclock.use" },
   { to: "/parts-catalog", label: "Parts catalog", icon: "wrench", permission: "jobs.read" },
   { to: "/finance", label: "Finance", icon: "chart", permission: "finance.read" },
-  { to: "/reports", label: "Reports", icon: "chart", permission: "reports.sales" },
+  { to: "/reports", label: "Daily Sales & Invoices", icon: "chart", permission: "reports.sales" },
   { to: "/audit", label: "Audit trail", icon: "shield", permission: "audit.read" },
   { to: "/settings", label: "Settings", icon: "settings", permission: "settings.read" },
 ];

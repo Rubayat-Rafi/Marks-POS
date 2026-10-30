@@ -12,6 +12,7 @@ import { decimalToNumber } from "../../lib/money.js";
 import { withPhotoKeys } from "../../lib/json.js";
 import { assertRepairOrderTransition, REPAIR_ORDER_LANES } from "../../domain/states.js";
 import { grossMarginPct } from "../../domain/pricing.js";
+import { deleteRepairOrderTx } from "../../domain/deletion.js";
 
 export async function getWorkBoard(req: Request, res: Response) {
   const ctx = auth(req);
@@ -454,4 +455,80 @@ export async function addInspection(req: Request, res: Response) {
   });
 
   res.status(201).json(withPhotoKeys(inspection));
+}
+
+export async function deleteRepairOrder(req: Request, res: Response) {
+  const ctx = auth(req);
+  const order = await db.repairOrder.findFirst({
+    where: { id: req.params.id, ...tenantScope(req) },
+  });
+  if (!order) throw ApiError.notFound("Repair order not found.");
+
+  await db.$transaction(async (tx) => {
+    await deleteRepairOrderTx(tx, ctx.organizationId, order.id);
+    await recordAudit(tx, {
+      organizationId: ctx.organizationId,
+      ...auditContext(req),
+      action: "repair_order.deleted",
+      resourceType: "repair_order",
+      resourceId: order.id,
+      metadata: { number: order.number, status: order.status },
+    });
+  });
+
+  res.json({ success: true });
+}
+
+export async function deleteTask(req: Request, res: Response) {
+  const task = await db.repairTask.findFirst({
+    where: { id: req.params.taskId, repairOrder: { ...tenantScope(req) } },
+  });
+  if (!task) throw ApiError.notFound("Task not found.");
+
+  await db.repairTask.delete({ where: { id: task.id } });
+  res.json({ success: true });
+}
+
+export async function deleteTimeEntry(req: Request, res: Response) {
+  const entry = await db.timeEntry.findFirst({
+    where: { id: req.params.timeEntryId, repairOrder: { ...tenantScope(req) } },
+  });
+  if (!entry) throw ApiError.notFound("Time entry not found.");
+
+  await db.timeEntry.delete({ where: { id: entry.id } });
+  res.json({ success: true });
+}
+
+export async function deletePartUsage(req: Request, res: Response) {
+  const ctx = auth(req);
+  const usage = await db.jobPartUsage.findFirst({
+    where: { id: req.params.usageId, repairOrder: { ...tenantScope(req) } },
+  });
+  if (!usage) throw ApiError.notFound("Part usage not found.");
+
+  await db.$transaction(async (tx) => {
+    if (usage.catalogItemId && !usage.returned) {
+      await tx.catalogItem.updateMany({
+        where: { id: usage.catalogItemId, organizationId: ctx.organizationId },
+        data: { onHand: { increment: usage.quantity } },
+      });
+    }
+    await tx.jobPartUsage.delete({ where: { id: usage.id } });
+  });
+
+  res.json({ success: true });
+}
+
+export async function deleteInspection(req: Request, res: Response) {
+  const inspection = await db.inspection.findFirst({
+    where: { id: req.params.inspectionId, ...tenantScope(req) },
+  });
+  if (!inspection) throw ApiError.notFound("Inspection not found.");
+
+  await db.$transaction(async (tx) => {
+    await tx.inspectionItem.deleteMany({ where: { inspectionId: inspection.id } });
+    await tx.inspection.delete({ where: { id: inspection.id } });
+  });
+
+  res.json({ success: true });
 }

@@ -31,3 +31,9 @@ appointmentRouter.post(
   requirePermission("jobs.write"),
   asyncHandler(appointmentsController.checkInAppointment),
 );
+
+appointmentRouter.delete(
+  "/:id",
+  requirePermission("appointments.write"),
+  asyncHandler(appointmentsController.deleteAppointment),
+);

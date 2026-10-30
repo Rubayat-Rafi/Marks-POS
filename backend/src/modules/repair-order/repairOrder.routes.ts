@@ -73,3 +73,33 @@ repairOrderRouter.post(
   requirePermission("inspections.write"),
   asyncHandler(roController.addInspection),
 );
+
+repairOrderRouter.delete(
+  "/:id",
+  requirePermission("jobs.write"),
+  asyncHandler(roController.deleteRepairOrder),
+);
+
+repairOrderRouter.delete(
+  "/tasks/:taskId",
+  requirePermission("jobs.technician"),
+  asyncHandler(roController.deleteTask),
+);
+
+repairOrderRouter.delete(
+  "/time/:timeEntryId",
+  requirePermission("jobs.technician"),
+  asyncHandler(roController.deleteTimeEntry),
+);
+
+repairOrderRouter.delete(
+  "/parts/:usageId",
+  requirePermission("jobs.write"),
+  asyncHandler(roController.deletePartUsage),
+);
+
+repairOrderRouter.delete(
+  "/inspections/:inspectionId",
+  requirePermission("inspections.write"),
+  asyncHandler(roController.deleteInspection),
+);

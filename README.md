@@ -37,9 +37,9 @@ file: `frontend/src/lib/shop.ts`. Change them there.
 | 1. POS Item Functions | Live API-driven services & products | Replaced static/dummy presets with live queries to `/settings/labor-rates`, `/inventory/available`, and `/settings/catalog`. |
 | 2. Team Member Management | Full profile editing & deletion modal | Edit staff first name, last name, email, and password in `/settings`. Added a custom modal for deleting team members safely. |
 | 3. Operational Data Reset | Complete database reset | Danger Zone "Remove All Data" resets transactions, jobs, invoices, inventory, catalog items, labor rates, and time clock punches while protecting the owner account and audit logs. |
-| 4. Time Clock Punches | Clean shift tracking | Shift clock punches are tracked per shop, isolated to the tenant, and properly wiped upon operational reset. |
-| 5. Audit Trail | Dedicated audit page | Added a dedicated `/audit` route with KPI summary cards, human-readable action tags, and raw metadata inspection. |
-| 6. Reports Filtering | Date range presets & CSV downloads | Upgraded `/reports` with quick range filters (Today, Last 7d, Month-to-date, Custom) and instant CSV report exports. |
+| 4. Delete Functionality | Admin / Owner cascading deletes | Added full transactional deletion across invoices, customers, vehicles, work orders, estimates, payments, appointments, parts, and catalog items with automatic inventory serial restoration. |
+| 5. Daily Sales & Invoices | Shop division pill & clean 1-page reports | Added `SHOP: All Shops | Tires Shop | Mufflers Shop` selector pill, accurate local date presets (Today, Yesterday, Last 7d, This Month), clean 1-page printable daily sales report with suppressed browser URL headers, and standalone customer invoices. |
+| 6. CORS & Production Connectivity | Split-domain cross-origin support | Enhanced Express server CORS and CSP headers to seamlessly whitelist `https://marks.chromopay.com`, `https://auto.chromopay.com`, and custom environments with credentials and preflight handling. |
 | 7. Idempotency & Payments | Resilient checkout flow | The POS generates new idempotency keys per attempt and prevents race conditions or overpayment on balances. |
 | 8. API Security | Strict authentication & CSRF | httpOnly SameSite cookies, JWT validation, rate-limiting, and tenant-scoped Prisma database queries. |
 
@@ -67,6 +67,28 @@ cPanel Node.js app with `/api` proxied to it. See
 [docs/DEPLOY-CPANEL.md](docs/DEPLOY-CPANEL.md) for the deployment, and
 [docs/tenant-isolation.md](docs/tenant-isolation.md) for what moving off
 PostgreSQL cost in tenant-isolation terms.
+
+## Production & Split-Domain Deployment Configuration
+
+When deploying the frontend SPA (e.g. `https://marks.chromopay.com`) and the backend API (e.g. `https://auto.chromopay.com`) on different subdomains or hosts, ensure the following environment settings are configured in cPanel / Hostinger:
+
+### Backend Environment Variables (`backend/.env` or hosting panel):
+```bash
+NODE_ENV=production
+PORT=4000
+PUBLIC_API_URL="https://auto.chromopay.com"
+PUBLIC_WEB_URL="https://marks.chromopay.com"
+CORS_ORIGIN="https://marks.chromopay.com,https://auto.chromopay.com"
+COOKIE_SAMESITE="none"
+COOKIE_SECURE=true
+```
+
+> **Note on CORS in the API**: The server in `backend/src/index.ts` automatically permits `https://marks.chromopay.com`, `https://auto.chromopay.com`, and any origins defined in `CORS_ORIGIN` with `credentials: true` and preflight handling. When uploading updates to the server, ensure you upload the compiled `dist/` folder or run `npm run build` so the server runs the updated `dist/index.js`.
+
+### Frontend Environment Variables (`frontend/.env.production`):
+```bash
+VITE_API_URL="https://auto.chromopay.com"
+```
 
 ---
 

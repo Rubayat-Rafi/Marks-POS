@@ -31,24 +31,24 @@ export const PERMISSIONS = {
 
   // Money
   "invoices.read": ["OWNER", "MANAGER", "SERVICE_ADVISOR", "BOOKKEEPER"],
-  "invoices.write": ["OWNER", "MANAGER", "SERVICE_ADVISOR"],
-  "payments.collect": ["OWNER", "MANAGER", "SERVICE_ADVISOR"],
-  "payments.refund": ["OWNER", "MANAGER"],
+  "invoices.write": ["OWNER", "MANAGER", "SERVICE_ADVISOR", "BOOKKEEPER"],
+  "payments.collect": ["OWNER", "MANAGER", "SERVICE_ADVISOR", "BOOKKEEPER"],
+  "payments.refund": ["OWNER", "MANAGER", "SERVICE_ADVISOR", "BOOKKEEPER"],
   // A large refund needs an owner even where a manager may refund small ones.
-  "payments.refund.large": ["OWNER"],
-  "credits.issue": ["OWNER", "MANAGER", "BOOKKEEPER"],
-  "expenses.write": ["OWNER", "MANAGER", "BOOKKEEPER"],
-  "finance.read": ["OWNER", "MANAGER", "BOOKKEEPER"],
-  "finance.reconcile": ["OWNER", "MANAGER", "BOOKKEEPER"],
+  "payments.refund.large": ["OWNER", "MANAGER"],
+  "credits.issue": ["OWNER", "MANAGER", "SERVICE_ADVISOR", "BOOKKEEPER"],
+  "expenses.write": ["OWNER", "MANAGER", "SERVICE_ADVISOR", "BOOKKEEPER"],
+  "finance.read": ["OWNER", "MANAGER", "SERVICE_ADVISOR", "BOOKKEEPER"],
+  "finance.reconcile": ["OWNER", "MANAGER", "SERVICE_ADVISOR", "BOOKKEEPER"],
   // Cost and margin data is withheld from advisors and technicians.
   "reports.costs": ["OWNER", "MANAGER", "BOOKKEEPER"],
   "reports.sales": ["OWNER", "MANAGER", "SERVICE_ADVISOR", "BOOKKEEPER"],
 
   // Administration
-  "settings.read": ["OWNER", "MANAGER", "BOOKKEEPER"],
-  "settings.write": ["OWNER"],
-  "staff.manage": ["OWNER"],
-  "providers.manage": ["OWNER"],
+  "settings.read": ["OWNER", "MANAGER", "SERVICE_ADVISOR", "BOOKKEEPER"],
+  "settings.write": ["OWNER", "MANAGER"],
+  "staff.manage": ["OWNER", "MANAGER"],
+  "providers.manage": ["OWNER", "MANAGER"],
   "audit.read": ["OWNER", "MANAGER"],
 
   // Payroll. A worker's own hours and pay are reached through a "me" endpoint
@@ -56,18 +56,18 @@ export const PERMISSIONS = {
   // ANOTHER person's pay rate is kept narrower than "staff.manage" and even
   // narrower than job cost: a manager who can see shop margins does not
   // automatically see what a coworker is paid.
-  "payroll.read": ["OWNER", "BOOKKEEPER"],
-  "payroll.write": ["OWNER"],
+  "payroll.read": ["OWNER", "MANAGER", "BOOKKEEPER"],
+  "payroll.write": ["OWNER", "MANAGER", "BOOKKEEPER"],
 
   // Parts reference data: fitment tagging and the vehicle make/model lookup.
-  "parts_catalog.write": ["OWNER", "MANAGER"],
+  "parts_catalog.write": ["OWNER", "MANAGER", "SERVICE_ADVISOR"],
 
   // Serialised tire and muffler stock. Receiving stock happens at the counter,
   // so advisors may add serials; only owner and manager edit prices or write
   // stock off.
   "inventory.read": ["OWNER", "MANAGER", "SERVICE_ADVISOR", "TECHNICIAN", "BOOKKEEPER"],
   "inventory.receive": ["OWNER", "MANAGER", "SERVICE_ADVISOR"],
-  "inventory.manage": ["OWNER", "MANAGER"],
+  "inventory.manage": ["OWNER", "MANAGER", "SERVICE_ADVISOR"],
 
   // The counter's quick sale: bill a walk-in job and print the receipt in one step.
   "sales.quick": ["OWNER", "MANAGER", "SERVICE_ADVISOR"],

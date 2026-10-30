@@ -21,6 +21,7 @@ import {
   recordPayment,
 } from "../../domain/invoicing.js";
 import { MANUAL_METHODS, OPEN_ATTEMPT_STATUSES, resolveAttempt } from "../../domain/payments.js";
+import { deletePaymentTx } from "../../domain/deletion.js";
 
 export const idempotencyKey = z
   .string()
@@ -599,7 +600,7 @@ export async function listPayments(req: Request, res: Response) {
     take: 200,
     include: {
       customer: { select: { firstName: true, lastName: true } },
-      allocations: { include: { invoice: { select: { number: true } } } },
+      allocations: { include: { invoice: { select: { id: true, number: true } } } },
       refunds: true,
     },
   });
@@ -628,4 +629,26 @@ export async function simulatePayment(req: Request, res: Response) {
     ok: true,
     message: "The processor state changed. Call /resolve to post the result.",
   });
+}
+
+export async function deletePayment(req: Request, res: Response) {
+  const ctx = auth(req);
+  const payment = await db.payment.findFirst({
+    where: { id: req.params.paymentId, ...tenantScope(req) },
+  });
+  if (!payment) throw ApiError.notFound("Payment not found.");
+
+  await db.$transaction(async (tx) => {
+    await deletePaymentTx(tx, ctx.organizationId, payment.id);
+    await recordAudit(tx, {
+      organizationId: ctx.organizationId,
+      ...auditContext(req),
+      action: "payment.deleted",
+      resourceType: "payment",
+      resourceId: payment.id,
+      metadata: { amount: payment.amount, method: payment.method },
+    });
+  });
+
+  res.json({ success: true });
 }

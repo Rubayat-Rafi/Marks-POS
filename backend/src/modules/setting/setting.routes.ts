@@ -70,6 +70,12 @@ settingRouter.post(
   asyncHandler(settingController.createLaborRate),
 );
 
+settingRouter.delete(
+  "/labor-rates/:id",
+  requirePermission("settings.write"),
+  asyncHandler(settingController.deleteLaborRate),
+);
+
 // Catalog
 settingRouter.get(
   "/catalog",
@@ -93,6 +99,12 @@ settingRouter.patch(
   "/catalog/:id",
   requirePermission("parts_catalog.write"),
   asyncHandler(settingController.updateCatalogItem),
+);
+
+settingRouter.delete(
+  "/catalog/:id",
+  requirePermission("parts_catalog.write"),
+  asyncHandler(settingController.deleteCatalogItem),
 );
 
 settingRouter.post(

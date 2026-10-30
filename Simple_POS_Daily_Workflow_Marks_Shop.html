@@ -6,7 +6,7 @@
   <style>
     @page {
       size: letter portrait;
-      margin: 12mm 12mm 12mm 12mm;
+      margin: 10mm 12mm 10mm 12mm;
     }
     * {
       box-sizing: border-box;
@@ -19,7 +19,7 @@
       background: #ffffff;
       margin: 0;
       padding: 0;
-      font-size: 13px;
+      font-size: 12.5px;
       line-height: 1.45;
     }
     .header {
@@ -27,8 +27,8 @@
       justify-content: space-between;
       align-items: center;
       border-bottom: 2px solid #0f172a;
-      padding-bottom: 12px;
-      margin-bottom: 16px;
+      padding-bottom: 10px;
+      margin-bottom: 14px;
     }
     .brand-title {
       font-size: 22px;
@@ -59,7 +59,7 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 12px;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
     .card {
       border: 1px solid #cbd5e1;
@@ -71,7 +71,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      font-size: 14px;
+      font-size: 13.5px;
       font-weight: 700;
       color: #0f172a;
       margin-bottom: 8px;
@@ -96,18 +96,18 @@
       padding-left: 18px;
     }
     li {
-      margin-bottom: 5px;
+      margin-bottom: 4px;
     }
 
     .shop-table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 6px;
-      font-size: 12px;
+      font-size: 11.5px;
     }
     .shop-table th, .shop-table td {
       border: 1px solid #cbd5e1;
-      padding: 6px 8px;
+      padding: 5px 7px;
       text-align: left;
     }
     .shop-table th {
@@ -116,23 +116,23 @@
       color: #1e293b;
     }
     .shop-tire {
-      background: #f0fdf4;
-      color: #166534;
-      font-weight: 600;
+      background: #fef3c7;
+      color: #92400e;
+      font-weight: 700;
     }
     .shop-muffler {
-      background: #fef2f2;
-      color: #991b1b;
-      font-weight: 600;
+      background: #eff6ff;
+      color: #1e40af;
+      font-weight: 700;
     }
 
     .highlight-box {
       background: #eff6ff;
       border-left: 4px solid #2563eb;
-      padding: 8px 12px;
+      padding: 8px 10px;
       border-radius: 4px;
-      margin-top: 10px;
-      font-size: 12px;
+      margin-top: 8px;
+      font-size: 11.5px;
     }
     .highlight-box strong {
       color: #1e40af;
@@ -141,10 +141,10 @@
     .success-box {
       background: #f0fdf4;
       border-left: 4px solid #16a34a;
-      padding: 8px 12px;
+      padding: 8px 10px;
       border-radius: 4px;
-      margin-top: 10px;
-      font-size: 12px;
+      margin-top: 8px;
+      font-size: 11.5px;
     }
     .success-box strong {
       color: #166534;
@@ -154,11 +154,11 @@
       border: 1px solid #cbd5e1;
       border-radius: 8px;
       background: #ffffff;
-      padding: 12px 14px;
-      margin-top: 12px;
+      padding: 10px 14px;
+      margin-top: 10px;
     }
     .checklist-title {
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 700;
       color: #0f172a;
       margin-bottom: 6px;
@@ -169,7 +169,7 @@
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
       gap: 8px;
-      font-size: 11.5px;
+      font-size: 11px;
     }
     .checklist-item {
       display: flex;
@@ -189,8 +189,27 @@
       margin-top: 1px;
     }
 
+    .pill-preview {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      padding: 2px 6px;
+      font-size: 10.5px;
+      font-weight: 700;
+      margin: 2px 0;
+    }
+    .pill-active {
+      background: #0f172a;
+      color: #ffffff;
+      border-radius: 8px;
+      padding: 2px 8px;
+    }
+
     .footer {
-      margin-top: 14px;
+      margin-top: 12px;
       padding-top: 8px;
       border-top: 1px solid #e2e8f0;
       display: flex;
@@ -210,7 +229,7 @@
     </div>
     <div style="text-align: right;">
       <span class="badge">Standard Operating Procedure</span>
-      <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Easy 4-Step Daily Routine</div>
+      <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Clean & Simple 4-Step Daily Routine</div>
     </div>
   </div>
 
@@ -222,20 +241,20 @@
         <span>Ring Up Counter Sale (Quick Sale / POS)</span>
       </div>
       <ol>
-        <li>Click <strong>Quick Sale</strong> or <strong>POS</strong> in the left navigation menu.</li>
+        <li>Click <strong>Quick Sale</strong> in the navigation menu.</li>
         <li><strong>Add items / services</strong> to invoice:
           <ul>
-            <li>Type tire size (e.g. <code>205/55R16</code>, <code>225/65R17</code>) or service (Mount & Balance, Flat Repair).</li>
-            <li>For exhaust: select Muffler, Catalytic Converter, Pipe Welding, etc.</li>
+            <li>Tires: type size (e.g. <code>205/55R16</code>, <code>225/65R17</code>) or service (Mount & Balance, Flat Repair).</li>
+            <li>Mufflers / Exhaust: select Muffler, Catalytic Converter, Flex Pipe, Welding Labor.</li>
           </ul>
         </li>
         <li><strong>Collect payment:</strong>
           <ul>
-            <li>💵 <strong>Cash:</strong> Enter amount received. Cash goes straight into your till drawer.</li>
-            <li>💳 <strong>Card:</strong> Swipe or tap card on the counter payment terminal.</li>
+            <li>💵 <strong>Cash:</strong> Enter amount tendered. Cash goes directly into register drawer.</li>
+            <li>💳 <strong>Card:</strong> Swipe/tap on counter terminal.</li>
           </ul>
         </li>
-        <li>Click <strong>Complete / Pay</strong> &rarr; Receipt prints or displays immediately!</li>
+        <li>Click <strong>Complete / Pay</strong> &rarr; One-click <strong>Print Receipt</strong> or <strong>Download Invoice (PDF)</strong>.</li>
       </ol>
     </div>
 
@@ -243,32 +262,32 @@
     <div class="card">
       <div class="card-title">
         <span class="step-num">2</span>
-        <span>Automatic Shop Separation</span>
+        <span>Automatic Shop Separation (Tires vs. Mufflers)</span>
       </div>
-      <p style="margin-top: 0; margin-bottom: 6px;">The POS automatically routes money into the right shop without any manual math:</p>
+      <p style="margin-top: 0; margin-bottom: 6px;">The POS automatically classifies items into their respective shops without any manual math:</p>
       <table class="shop-table">
         <thead>
           <tr>
-            <th>Shop</th>
-            <th>Keywords / Items</th>
-            <th>Reports As</th>
+            <th>Shop Division</th>
+            <th>Sample Items</th>
+            <th>Automated Tracking</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td class="shop-tire">🛞 Tires Shop</td>
-            <td>Tire sizes (<code>205/55R16</code>), Used Tires, New Tires, Mount, Balance, Valve Stem</td>
-            <td>Tires Daily Gross, Tires Cash in Drawer</td>
+            <td>Tires (<code>205/55R16</code>), Mount & Balance, Tire Repair, Valve Stems, Disposal Fee</td>
+            <td>Tires Revenue, Tires Tax, Tires Invoices</td>
           </tr>
           <tr>
             <td class="shop-muffler">🔧 Mufflers Shop</td>
-            <td>Muffler, Catalytic Converter, Exhaust Pipe, Hanger, Welding Labor</td>
-            <td>Muffler Gross, Muffler Card/Cash Totals</td>
+            <td>Muffler, Catalytic Converter, Exhaust Pipe, Hangers, Custom Welding Labor</td>
+            <td>Mufflers Revenue, Mufflers Tax, Mufflers Invoices</td>
           </tr>
         </tbody>
       </table>
       <div class="highlight-box">
-        <strong>💡 Multi-item sale?</strong> If a customer gets both a tire and a muffler weld, the POS automatically splits the revenue to each shop's ledger accurately.
+        <strong>💡 Multi-department sale?</strong> If an invoice has both a tire and an exhaust weld, the system automatically tracks each shop's net total, tax, and sales breakdown.
       </div>
     </div>
 
@@ -276,46 +295,45 @@
     <div class="card">
       <div class="card-title">
         <span class="step-num">3</span>
-        <span>Checking Money Received (Finance Page)</span>
+        <span>Daily Sales & Invoices Screen</span>
       </div>
+      <p style="margin-top: 0; margin-bottom: 6px;">Open <strong>Daily Sales & Invoices</strong> from the menu for a clean overview:</p>
       <ul>
-        <li>Open <strong>Finance</strong> from the left menu to view all transactions.</li>
-        <li><strong>Cash Payments (💵):</strong>
-          <ul>
-            <li>Clearly tagged as <code>💵 Cash</code> & <code>✓ In Cash Drawer</code>.</li>
-            <li><strong>No bank reference or payout confirmation needed</strong> — cash is already physically in your counter drawer!</li>
-          </ul>
+        <li><strong>Shop Selector Pill:</strong> Easily isolate shop data with one click:
+          <br>
+          <span class="pill-preview"><span class="pill-active">🏠 All Shops</span> &nbsp; 🛞 Tires Shop &nbsp; 🔧 Mufflers Shop</span>
         </li>
-        <li><strong>Card Payments (💳):</strong>
-          <ul>
-            <li>Tagged as <code>💳 Card (Counter Terminal)</code>. Settled through card processor clearing.</li>
-          </ul>
-        </li>
+        <li>Selecting <strong>Tires Shop</strong> isolates only Tires sales, totals, and invoices.</li>
+        <li>Selecting <strong>Mufflers Shop</strong> isolates only Mufflers sales, totals, and invoices.</li>
+        <li><strong>Clean Summary Cards:</strong> Total Sales, Sales Before Tax, Sales Tax, and Shop Totals.</li>
+        <li><strong>Date Presets:</strong> One click for <strong>Today</strong>, <strong>Yesterday</strong>, <strong>Last 7 Days</strong>, <strong>This Month</strong>, or Custom dates.</li>
       </ul>
-      <div class="success-box">
-        <strong>✓ Zero Confusion:</strong> Cash is in hand immediately; card payments reconcile with your batch terminal report.
-      </div>
     </div>
 
     <!-- STEP 4 -->
     <div class="card">
       <div class="card-title">
         <span class="step-num">4</span>
-        <span>End of Day: Print Daily Sales PDF (&lt; 1 Min)</span>
+        <span>Simple Clean Reports & Invoices (< 1 Min)</span>
       </div>
-      <p style="margin-top: 0; margin-bottom: 6px;">At daily closing time, generate your printable sales report:</p>
+      <p style="margin-top: 0; margin-bottom: 6px;">Clean, straightforward reporting with zero unnecessary clutter:</p>
       <ol>
-        <li>Click <strong>Reports</strong> from the left menu.</li>
-        <li>Date Filter is set to <strong>Today</strong> by default.</li>
-        <li>Click your desired 1-click PDF button:
+        <li><strong>Daily Sales Report (Simple Header + Table + Total):</strong>
           <ul>
-            <li>🖨️ <strong>Print Tires PDF:</strong> Prints only Tires Shop sales & invoices.</li>
-            <li>🖨️ <strong>Print Mufflers PDF:</strong> Prints only Mufflers Shop sales & invoices.</li>
-            <li>🖨️ <strong>Print / Save as PDF:</strong> Complete consolidated shop report.</li>
+            <li>Click <strong>Print Daily Sales (PDF)</strong> at top of page.</li>
+            <li>Generates a clean header followed immediately by the invoice register table with <strong>TOTAL</strong> (no extra redundant summary cards).</li>
           </ul>
         </li>
-        <li>Print directly to paper or choose <strong>"Save as PDF"</strong> for owner record keeping.</li>
+        <li><strong>Individual Customer Invoices (Separate Design):</strong>
+          <ul>
+            <li>In the Invoices Table, every row has <strong>View Invoice</strong>, <strong>Print / PDF</strong>, and <strong>Delete</strong>.</li>
+            <li>Clicking <strong>Print / PDF</strong> generates an official, standalone <strong>Sales Invoice</strong> (with Bill-To box, itemized breakdown, tax, and signatures) formatted for 1 page.</li>
+          </ul>
+        </li>
       </ol>
+      <div class="success-box">
+        <strong>✓ Clean 1-Page Layouts:</strong> Zero browser URLs or page-overflow clutter when printing or saving as PDF.
+      </div>
     </div>
   </div>
 
@@ -325,23 +343,24 @@
     <div class="checklist-items">
       <div class="checklist-item">
         <span class="checkbox"></span>
-        <div><strong>Morning Opening:</strong> Log into POS and confirm cash drawer starting float.</div>
+        <div><strong>Morning Opening:</strong> Open POS / Quick Sale & verify cash drawer float.</div>
       </div>
       <div class="checklist-item">
         <span class="checkbox"></span>
-        <div><strong>Every Customer:</strong> Create invoice in Quick Sale / POS, choose Cash or Card.</div>
+        <div><strong>Every Customer:</strong> Create sale in Quick Sale, collect Cash/Card, print/download receipt.</div>
       </div>
       <div class="checklist-item">
         <span class="checkbox"></span>
-        <div><strong>Evening Closing:</strong> Go to Reports &rarr; Click <strong>Print PDF</strong> &rarr; Match cash drawer.</div>
+        <div><strong>Evening Closing:</strong> Go to <strong>Daily Sales & Invoices</strong> &rarr; Click <strong>Print Daily Sales (PDF)</strong> &rarr; Balance drawer.</div>
       </div>
     </div>
   </div>
 
   <div class="footer">
-    <div>Mark's Tire & Muffler • Standard Operating Guide • Version 1.0</div>
+    <div>Mark's Tire & Muffler • Standard Operating Guide • Version 2.1 (Simple Header & Table Report)</div>
     <div>System URL: <strong>https://marks.chromopay.com</strong> • API: <strong>https://auto.chromopay.com</strong></div>
   </div>
 
 </body>
 </html>
+

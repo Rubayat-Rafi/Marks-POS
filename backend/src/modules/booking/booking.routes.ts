@@ -26,3 +26,9 @@ bookingRouter.post(
   asyncHandler(bookingController.convertBookingToAppointment),
 );
 
+bookingRouter.delete(
+  "/:id",
+  requirePermission("bookings.write"),
+  asyncHandler(bookingController.deleteBookingRequest),
+);
+

@@ -49,3 +49,9 @@ invoiceRouter.post(
   requirePermission("finance.read"),
   asyncHandler(invoicesController.recognizeCosts),
 );
+
+invoiceRouter.delete(
+  "/:id",
+  requirePermission("invoices.write"),
+  asyncHandler(invoicesController.deleteInvoice),
+);

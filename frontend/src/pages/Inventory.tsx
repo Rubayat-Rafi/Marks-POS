@@ -377,6 +377,10 @@ function DetailModal({
     mutationFn: (id: string) => api.post(`/inventory/units/${id}/restock`),
     onSuccess: invalidate,
   });
+  const deleteUnit = useMutation({
+    mutationFn: (id: string) => api.delete(`/inventory/units/${id}`),
+    onSuccess: invalidate,
+  });
 
   const units = p?.units.filter((u) => u.status === tab) ?? [];
   const counts = {
@@ -430,20 +434,19 @@ function DetailModal({
                       Edit
                     </Button>
                   )}
-                  {can("inventory.manage") && counts.IN_STOCK === 0 && counts.SOLD === 0 ? (
+                  {can("inventory.manage") && (
                     <Button
-                      variant="secondary"
-                      className="text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-200"
+                      variant="danger"
                       loading={del.isPending}
                       onClick={() => {
-                        if (confirm("Are you sure you want to delete this product?")) {
+                        if (confirm(`Delete product "${productName(p)}" and all its ${p.units.length} unit(s)?`)) {
                           del.mutate();
                         }
                       }}
                     >
                       Delete
                     </Button>
-                  ) : null}
+                  )}
                   {can("inventory.receive") && (
                     <Button onClick={() => onReceive(p)}>
                       <Icon name="plus" className="h-4 w-4" /> Receive
@@ -478,21 +481,21 @@ function DetailModal({
                   <Button variant="secondary" onClick={() => setEdit(null)}>
                     Cancel
                   </Button>
-                  {can("inventory.manage") && counts.IN_STOCK === 0 && counts.SOLD === 0 ? (
+                  {can("inventory.manage") && (
                     <Button
                       type="button"
                       variant="danger"
                       className="mr-auto"
                       loading={del.isPending}
                       onClick={() => {
-                        if (confirm("Are you sure you want to delete this product?")) {
+                        if (confirm(`Delete product "${productName(p)}" and all its ${p.units.length} unit(s)?`)) {
                           del.mutate();
                         }
                       }}
                     >
                       Delete
                     </Button>
-                  ) : null}
+                  )}
                   <Button loading={save.isPending} disabled={!edit.name.trim()} onClick={() => save.mutate()}>
                     Save
                   </Button>
@@ -519,7 +522,7 @@ function DetailModal({
                   </button>
                 ))}
               </div>
-              <ErrorBanner error={removeUnit.error ?? restock.error} />
+              <ErrorBanner error={removeUnit.error ?? restock.error ?? deleteUnit.error ?? del.error} />
               {units.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">None.</p>
               ) : (
@@ -533,25 +536,41 @@ function DetailModal({
                           {u.note && ` · ${u.note}`}
                         </p>
                       </div>
-                      {u.status === "IN_STOCK" && can("inventory.manage") && (
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-red-600 hover:underline"
-                          onClick={() => setRemovingUnit(u)}
-                        >
-                          Remove
-                        </button>
-                      )}
-                      {u.status === "REMOVED" && can("inventory.manage") && (
-                        <button type="button" className="text-xs font-semibold text-brand-600 hover:underline" onClick={() => restock.mutate(u.id)}>
-                          Put back in stock
-                        </button>
-                      )}
-                      {u.status === "SOLD" && u.invoice && (
-                        <Link to={`/receipts/${u.invoice.id}`} className="text-xs font-semibold text-brand-600 hover:underline">
-                          {u.invoice.number}
-                        </Link>
-                      )}
+                      <div className="flex items-center gap-3">
+                        {u.status === "IN_STOCK" && can("inventory.manage") && (
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-amber-700 hover:underline"
+                            onClick={() => setRemovingUnit(u)}
+                          >
+                            Mark Removed
+                          </button>
+                        )}
+                        {u.status === "REMOVED" && can("inventory.manage") && (
+                          <button type="button" className="text-xs font-semibold text-brand-600 hover:underline" onClick={() => restock.mutate(u.id)}>
+                            Put back in stock
+                          </button>
+                        )}
+                        {u.status === "SOLD" && u.invoice && (
+                          <Link to={`/receipts/${u.invoice.id}`} className="text-xs font-semibold text-brand-600 hover:underline">
+                            {u.invoice.number}
+                          </Link>
+                        )}
+                        {can("inventory.receive") && (
+                          <button
+                            type="button"
+                            disabled={deleteUnit.isPending}
+                            className="text-xs font-semibold text-red-600 hover:underline disabled:opacity-50"
+                            onClick={() => {
+                              if (confirm(`Permanently delete serial #${u.serialNumber}?`)) {
+                                deleteUnit.mutate(u.id);
+                              }
+                            }}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </li>
                   ))}
                 </ul>

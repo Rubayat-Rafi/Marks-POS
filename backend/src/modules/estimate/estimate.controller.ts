@@ -11,6 +11,7 @@ import { enqueueOutbox, OUTBOX_EVENTS } from "../../lib/outbox.js";
 import { decimalToNumber } from "../../lib/money.js";
 import { priceLines, type TaxPolicy } from "../../domain/pricing.js";
 import { assertEstimateTransition } from "../../domain/states.js";
+import { deleteEstimateTx } from "../../domain/deletion.js";
 
 export const lineSchema = z.object({
   lineType: z.enum(["PART", "LABOR", "FEE", "SUBLET", "DISCOUNT"]),
@@ -326,4 +327,26 @@ export async function reviseEstimate(req: Request, res: Response) {
   });
 
   res.status(201).json(result);
+}
+
+export async function deleteEstimate(req: Request, res: Response) {
+  const ctx = auth(req);
+  const estimate = await db.estimate.findFirst({
+    where: { id: req.params.id, ...tenantScope(req) },
+  });
+  if (!estimate) throw ApiError.notFound("Estimate not found.");
+
+  await db.$transaction(async (tx) => {
+    await deleteEstimateTx(tx, ctx.organizationId, estimate.id);
+    await recordAudit(tx, {
+      organizationId: ctx.organizationId,
+      ...auditContext(req),
+      action: "estimate.deleted",
+      resourceType: "estimate",
+      resourceId: estimate.id,
+      metadata: { number: estimate.number },
+    });
+  });
+
+  res.json({ success: true });
 }

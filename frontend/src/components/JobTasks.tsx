@@ -58,6 +58,11 @@ export function JobTasks({ jobId, tasks }: { jobId: string; tasks: Task[] }) {
     onSuccess: refresh,
   });
 
+  const removeTask = useMutation({
+    mutationFn: (taskId: string) => api.delete(`/repair-orders/tasks/${taskId}`),
+    onSuccess: refresh,
+  });
+
   const nameFor = (id: string | null) =>
     id ? (technicians.data?.data.find((t) => t.id === id)?.name ?? "Assigned") : "Unassigned";
 
@@ -65,9 +70,10 @@ export function JobTasks({ jobId, tasks }: { jobId: string; tasks: Task[] }) {
     <div className="space-y-3">
       <ErrorBanner error={create.error} />
       <ErrorBanner error={update.error} />
+      <ErrorBanner error={removeTask.error} />
 
       <DataState empty={tasks.length === 0} emptyMessage="No tasks on this job yet.">
-        <Table headers={["Task", "Assigned to", "Est. hours", "Status"]}>
+        <Table headers={["Task", "Assigned to", "Est. hours", "Status", ""]}>
           {tasks.map((task) => {
             // Mirrors the server rule so the control is not a dead end.
             const locked =
@@ -124,6 +130,18 @@ export function JobTasks({ jobId, tasks }: { jobId: string; tasks: Task[] }) {
                   </Select>
                   {locked && (
                     <p className="mt-1 text-[11px] text-slate-400">Assigned to someone else</p>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {can("jobs.write") && (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      loading={removeTask.isPending}
+                      onClick={() => removeTask.mutate(task.id)}
+                    >
+                      Delete
+                    </Button>
                   )}
                 </td>
               </tr>

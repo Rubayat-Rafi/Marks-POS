@@ -1,10 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { customerLabel, dateOnly, dateTime, money, vehicleLabel } from "../lib/format";
 import { useAuth } from "../lib/auth";
 import { PageHeader } from "../components/Layout";
-import { Card, DataState, Notice, StatTile, StatusBadge, Table } from "../components/ui";
+import { Button, Card, DataState, ErrorBanner, Modal, Notice, StatTile, StatusBadge, Table } from "../components/ui";
 import type { Customer, Vehicle } from "../lib/types";
 
 type VehicleDetail = Vehicle & {
@@ -29,7 +30,10 @@ type VehicleDetail = Vehicle & {
 
 export function VehicleDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { can } = useAuth();
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const vehicle = useQuery({
     queryKey: ["vehicle", id],
@@ -38,6 +42,25 @@ export function VehicleDetailPage() {
   });
 
   const v = vehicle.data;
+
+  const deleteVehicle = useMutation({
+    mutationFn: () => api.delete(`/vehicles/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["customers"] });
+      void queryClient.invalidateQueries({ queryKey: ["board"] });
+      const ownerId = v?.owners?.[0]?.customer?.id;
+      navigate(ownerId ? `/customers/${ownerId}` : "/customers");
+    },
+  });
+
+  const deleteJob = useMutation({
+    mutationFn: (roId: string) => api.delete(`/repair-orders/${roId}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["vehicle", id] });
+      void queryClient.invalidateQueries({ queryKey: ["board"] });
+    },
+  });
+
   const latestMileage = v?.mileageReadings[0];
   const lifetimeSpend =
     v?.repairOrders
@@ -54,7 +77,44 @@ export function VehicleDetailPage() {
             ? [v.trim, v.engine, v.color].filter(Boolean).join("  ·  ") || undefined
             : undefined
         }
+        action={
+          v && can("vehicles.write") ? (
+            <Button variant="danger" onClick={() => setConfirmDelete(true)}>
+              Delete Vehicle
+            </Button>
+          ) : undefined
+        }
       />
+
+      {confirmDelete && v && (
+        <Modal
+          title={`Delete ${vehicleLabel(v)}?`}
+          onClose={() => !deleteVehicle.isPending && setConfirmDelete(false)}
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              This will permanently delete <strong>{vehicleLabel(v)}</strong> along with all its repair orders, estimates, inspections, and mileage history. This cannot be undone.
+            </p>
+            <ErrorBanner error={deleteVehicle.error} />
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleteVehicle.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                loading={deleteVehicle.isPending}
+                onClick={() => deleteVehicle.mutate()}
+              >
+                Yes, Delete Vehicle
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       <DataState loading={vehicle.isLoading} error={vehicle.error}>
         {v && (
@@ -188,9 +248,25 @@ export function VehicleDetailPage() {
                         <StatusBadge status={ro.status} />
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <Link to={`/jobs/${ro.id}`} className="text-sm text-teal-700 hover:underline">
-                          Open
-                        </Link>
+                        <div className="flex items-center justify-end gap-2">
+                          <Link to={`/jobs/${ro.id}`} className="text-sm text-teal-700 hover:underline">
+                            Open
+                          </Link>
+                          {can("jobs.write") && (
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              loading={deleteJob.isPending}
+                              onClick={() => {
+                                if (confirm(`Delete job ${ro.number}?`)) {
+                                  deleteJob.mutate(ro.id);
+                                }
+                              }}
+                            >
+                              Delete
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

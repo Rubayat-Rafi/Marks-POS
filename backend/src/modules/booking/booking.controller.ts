@@ -204,3 +204,22 @@ export const convertBookingToAppointment = async (req: Request, res: Response) =
     message: "Appointment successfully created from website request!",
   });
 };
+
+export const deleteBookingRequest = async (req: Request, res: Response) => {
+  const ctx = auth(req);
+  const found = await db.bookingRequest.findFirst({
+    where: { id: req.params.id, ...tenantScope(req) },
+  });
+  if (!found) throw ApiError.notFound("Request not found.");
+
+  await db.bookingRequest.delete({ where: { id: found.id } });
+  await recordAudit(db, {
+    organizationId: ctx.organizationId,
+    ...auditContext(req),
+    action: "booking.deleted",
+    resourceType: "booking_request",
+    resourceId: found.id,
+    metadata: { name: found.name, phone: found.phone },
+  });
+  res.json({ success: true });
+};

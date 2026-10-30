@@ -21,9 +21,21 @@ import type { Customer } from "../lib/types";
 
 export function CustomersPage() {
   const { can } = useAuth();
+  const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState(params.get("q") || "");
   const [creating, setCreating] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
+
+  const deleteCustomer = useMutation({
+    mutationFn: (id: string) => api.delete(`/customers/${id}`),
+    onSuccess: () => {
+      setDeleteTarget(null);
+      void queryClient.invalidateQueries({ queryKey: ["customers"] });
+      void queryClient.invalidateQueries({ queryKey: ["board"] });
+      void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    },
+  });
 
   const [page, setPage] = useState<number>(() => {
     const p = parseInt(params.get("page") || "1", 10);
@@ -146,9 +158,20 @@ export function CustomersPage() {
                   {c._count?.repairOrders ?? 0}
                 </td>
                 <td className="px-3 py-2 text-right">
-                  <Link to={`/customers/${c.id}`} className="text-sm text-teal-700 hover:underline">
-                    Open
-                  </Link>
+                  <div className="flex items-center justify-end gap-2">
+                    <Link to={`/customers/${c.id}`} className="text-sm text-teal-700 hover:underline">
+                      Open
+                    </Link>
+                    {can("customers.write") && (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(c)}
+                        className="rounded border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -172,6 +195,36 @@ export function CustomersPage() {
       </Card>
 
       {creating && <NewCustomerModal onClose={() => setCreating(false)} />}
+
+      {deleteTarget && (
+        <Modal
+          title={`Delete ${customerLabel(deleteTarget)}?`}
+          onClose={() => !deleteCustomer.isPending && setDeleteTarget(null)}
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              This will permanently delete <strong>{customerLabel(deleteTarget)}</strong> along with their vehicles, repair orders, estimates, invoices, and payments. This cannot be undone.
+            </p>
+            <ErrorBanner error={deleteCustomer.error} />
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleteCustomer.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                loading={deleteCustomer.isPending}
+                onClick={() => deleteCustomer.mutate(deleteTarget.id)}
+              >
+                Yes, Delete Customer
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

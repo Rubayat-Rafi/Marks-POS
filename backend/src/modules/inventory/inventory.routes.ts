@@ -73,3 +73,9 @@ inventoryRouter.post(
   requirePermission("inventory.manage"),
   asyncHandler(inventoryController.restockUnit),
 );
+
+inventoryRouter.delete(
+  "/units/:id",
+  requirePermission("inventory.receive"),
+  asyncHandler(inventoryController.deleteUnit),
+);

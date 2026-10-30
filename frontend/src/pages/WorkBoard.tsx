@@ -188,6 +188,16 @@ export function WorkBoardPage() {
   const [shopFilter, setShopFilter] = useState<"ALL" | "TIRE" | "MUFFLER">(initialShop);
   const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
   const [showWalkIn, setShowWalkIn] = useState(false);
+  const [deleteTargetRo, setDeleteTargetRo] = useState<RepairOrder | null>(null);
+
+  const deleteJob = useMutation({
+    mutationFn: (id: string) => api.delete(`/repair-orders/${id}`),
+    onSuccess: () => {
+      setDeleteTargetRo(null);
+      void queryClient.invalidateQueries({ queryKey: ["board"] });
+      void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    },
+  });
 
   const handleShopFilterChange = (filter: "ALL" | "TIRE" | "MUFFLER") => {
     setShopFilter(filter);
@@ -1126,6 +1136,17 @@ export function WorkBoardPage() {
                               <span>Workspace</span>
                               <span>↗</span>
                             </Link>
+
+                            {can("jobs.write") && (
+                              <button
+                                type="button"
+                                onClick={() => setDeleteTargetRo(ro)}
+                                className="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-100 transition"
+                                title="Delete job"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </div>
                         </div>
                       </article>
@@ -1137,6 +1158,40 @@ export function WorkBoardPage() {
           })}
         </div>
       </DataState>
+
+      {deleteTargetRo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 className="text-base font-bold text-slate-900">
+              Delete Job #{deleteTargetRo.number}?
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              This will permanently delete repair order <strong>#{deleteTargetRo.number}</strong> ({vehicleLabel(deleteTargetRo.vehicle)}) along with its tasks, estimates, and invoices. This cannot be undone.
+            </p>
+            {deleteJob.error && (
+              <div className="mt-3">
+                <ErrorBanner error={deleteJob.error} />
+              </div>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setDeleteTargetRo(null)}
+                disabled={deleteJob.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                loading={deleteJob.isPending}
+                onClick={() => deleteJob.mutate(deleteTargetRo.id)}
+              >
+                Yes, Delete Job
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Quick Walk-In Check In Modal */}
       {showWalkIn && (

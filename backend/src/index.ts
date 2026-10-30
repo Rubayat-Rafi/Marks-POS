@@ -16,6 +16,31 @@ import { bootstrapAdminUser } from "./bootstrap/admin.bootstrap.js";
 const app = express();
 
 app.set("trust proxy", 1);
+
+// Helper to determine allowed origins (including marks.chromopay.com and localhost)
+const configuredOrigins = [
+  ...env.corsOrigin.split(",").map((o) => o.trim()),
+  env.publicWebUrl,
+  "https://marks.chromopay.com",
+  "https://auto.chromopay.com",
+  "http://localhost:5173",
+  "http://localhost:4000",
+].filter(Boolean);
+
+function isOriginAllowed(origin: string | undefined): boolean {
+  if (!origin) return true;
+  if (configuredOrigins.includes(origin)) return true;
+  try {
+    const u = new URL(origin);
+    if (u.hostname === "marks.chromopay.com" || u.hostname === "auto.chromopay.com" || u.hostname === "localhost") {
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -27,18 +52,27 @@ app.use(
         imgSrc: ["'self'", "data:", "blob:", "https:"],
         connectSrc: [
           "'self'",
-          env.publicWebUrl,
-          ...env.corsOrigin.split(",").map((o) => o.trim()),
-        ].filter(Boolean),
+          ...configuredOrigins,
+        ],
       },
     },
     crossOriginEmbedderPolicy: false,
   }),
 );
+
 app.use(
   cors({
-    origin: env.corsOrigin.split(",").map((o) => o.trim()),
+    origin: (origin, callback) => {
+      if (isOriginAllowed(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, false);
+      }
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "x-request-id", "idempotency-key"],
+    exposedHeaders: ["x-request-id"],
   }),
 );
 

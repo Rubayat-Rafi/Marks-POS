@@ -25,6 +25,12 @@ timeClockRouter.patch(
   asyncHandler(timeClockController.updateEntry),
 );
 
+timeClockRouter.delete(
+  "/:id",
+  requirePermission("timeclock.use"),
+  asyncHandler(timeClockController.deleteEntry),
+);
+
 timeClockRouter.get(
   "/payroll-summary",
   requirePermission("payroll.read"),

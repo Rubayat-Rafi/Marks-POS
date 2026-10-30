@@ -172,3 +172,28 @@ export async function checkInAppointment(req: Request, res: Response) {
 
   res.status(201).json(repairOrder);
 }
+
+export async function deleteAppointment(req: Request, res: Response) {
+  const ctx = auth(req);
+  const existing = await db.appointment.findFirst({
+    where: { id: req.params.id, ...tenantScope(req) },
+  });
+  if (!existing) throw ApiError.notFound("Appointment not found.");
+
+  await db.$transaction(async (tx) => {
+    await tx.repairOrder.updateMany({
+      where: { appointmentId: existing.id, organizationId: ctx.organizationId },
+      data: { appointmentId: null },
+    });
+    await tx.appointment.delete({ where: { id: existing.id } });
+    await recordAudit(tx, {
+      organizationId: ctx.organizationId,
+      ...auditContext(req),
+      action: "appointment.deleted",
+      resourceType: "appointment",
+      resourceId: existing.id,
+    });
+  });
+
+  res.json({ success: true });
+}

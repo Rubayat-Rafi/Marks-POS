@@ -13,6 +13,7 @@ import {
   issueInvoice,
   recognizeJobCosts,
 } from "../../domain/invoicing.js";
+import { deleteInvoiceTx } from "../../domain/deletion.js";
 
 export async function taxPolicyFor(tx: Tx, organizationId: string, customerId: string): Promise<TaxPolicy> {
   const [org, customer] = await Promise.all([
@@ -262,4 +263,26 @@ export async function recognizeCosts(req: Request, res: Response) {
     }),
   );
   res.json(result);
+}
+
+export async function deleteInvoice(req: Request, res: Response) {
+  const ctx = auth(req);
+  const invoice = await db.invoice.findFirst({
+    where: { id: req.params.id, ...tenantScope(req) },
+  });
+  if (!invoice) throw ApiError.notFound("Invoice not found.");
+
+  await db.$transaction(async (tx) => {
+    await deleteInvoiceTx(tx, ctx.organizationId, invoice.id);
+    await recordAudit(tx, {
+      organizationId: ctx.organizationId,
+      ...auditContext(req),
+      action: "invoice.deleted",
+      resourceType: "invoice",
+      resourceId: invoice.id,
+      metadata: { number: invoice.number, total: invoice.total, status: invoice.status },
+    });
+  });
+
+  res.json({ success: true });
 }

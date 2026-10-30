@@ -14,7 +14,8 @@ export type ReportType =
   | "LEDGER"
   | "DAILY_SALES_ALL"
   | "DAILY_SALES_TIRE"
-  | "DAILY_SALES_MUFFLER";
+  | "DAILY_SALES_MUFFLER"
+  | "SINGLE_INVOICE";
 
 export type PrintReportConfig = {
   type: ReportType;
@@ -26,13 +27,34 @@ export type PrintReportConfig = {
 export function PrintReportModal({
   config,
   onClose,
+  autoPrint = false,
 }: {
   config: PrintReportConfig;
   onClose: () => void;
+  autoPrint?: boolean;
 }) {
   const handlePrint = () => {
+    const prevTitle = document.title;
+    if (config.type === "SINGLE_INVOICE" && config.data?.number) {
+      document.title = `Invoice-${config.data.number}`;
+    } else if (config.type.startsWith("DAILY_SALES")) {
+      document.title = `Daily-Sales-Report-${config.dateRange?.from ?? "Today"}`;
+    }
     window.print();
+    window.setTimeout(() => {
+      document.title = prevTitle;
+    }, 500);
   };
+
+  // Automatically trigger print dialog on mount if autoPrint is requested
+  useEffect(() => {
+    if (autoPrint) {
+      const timer = setTimeout(() => {
+        handlePrint();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [autoPrint]);
 
   // Keyboard shortcut to close on Esc
   useEffect(() => {
@@ -82,8 +104,10 @@ export function PrintReportModal({
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
               }
-              aside, header, nav, .print\\:hidden {
+              /* Strict isolation: Hide ALL application shell, navigation, and background screen UI */
+              aside, header, nav, footer, .print\\:hidden, .report-screen-ui, .finance-screen-ui, main > div > *:not(.finance-print-modal-overlay) {
                 display: none !important;
+                visibility: hidden !important;
               }
               main {
                 margin: 0 !important;
@@ -100,6 +124,7 @@ export function PrintReportModal({
                 overflow: visible !important;
                 width: 100% !important;
                 height: auto !important;
+                visibility: visible !important;
               }
               .finance-print-modal-card {
                 position: static !important;
@@ -113,6 +138,7 @@ export function PrintReportModal({
                 margin: 0 !important;
                 overflow: visible !important;
                 background: #ffffff !important;
+                visibility: visible !important;
               }
               .finance-print-modal-scroll {
                 overflow: visible !important;
@@ -121,18 +147,23 @@ export function PrintReportModal({
                 padding: 0 !important;
                 margin: 0 !important;
                 background: #ffffff !important;
+                visibility: visible !important;
               }
               #printable-report-content {
                 position: static !important;
                 display: block !important;
                 width: 100% !important;
                 margin: 0 !important;
-                padding: 0 !important;
+                padding: 10mm 12mm !important;
                 background: #ffffff !important;
+                visibility: visible !important;
+              }
+              #printable-report-content * {
+                visibility: visible !important;
               }
               @page {
                 size: letter portrait;
-                margin: 12mm 10mm 12mm 10mm;
+                margin: 0mm;
               }
               tr {
                 page-break-inside: avoid !important;
@@ -145,35 +176,38 @@ export function PrintReportModal({
             }
           `}</style>
 
-          <div id="printable-report-content" className="space-y-6">
-            {/* Standard Official Header */}
-            <div className="border-b-2 border-slate-900 pb-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h1 className="font-display text-2xl font-black uppercase tracking-tight text-slate-900">
-                    MARK&apos;S TIRE SHOP &amp; MUFFLER
-                  </h1>
-                  <p className="text-xs text-slate-600">5229 Saint Claude Ave · New Orleans, LA 70117 · (504) 354-9396</p>
-                  <p className="text-xs text-slate-500 font-medium">Official Operational &amp; Financial Reporting</p>
-                </div>
-                <div className="text-right">
-                  <span className="inline-block rounded-md border border-slate-800 bg-slate-900 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white">
-                    {config.title}
-                  </span>
-                  <p className="mt-1 text-[11px] text-slate-500">Generated: {dateTime(new Date())}</p>
-                  {config.dateRange?.date && (
-                    <p className="text-xs font-semibold text-slate-800">Date: {dateOnly(config.dateRange.date)}</p>
-                  )}
-                  {config.dateRange?.from && config.dateRange?.to && (
-                    <p className="text-xs font-semibold text-slate-800">
-                      Period: {dateOnly(config.dateRange.from)} to {dateOnly(config.dateRange.to)}
-                    </p>
-                  )}
+          <div id="printable-report-content" className="space-y-4">
+            {/* Standard Official Header (skipped for SINGLE_INVOICE which renders its own formal Invoice Header) */}
+            {config.type !== "SINGLE_INVOICE" && (
+              <div className="border-b-2 border-slate-900 pb-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h1 className="font-display text-xl font-black uppercase tracking-tight text-slate-900">
+                      MARK&apos;S TIRE SHOP &amp; MUFFLER
+                    </h1>
+                    <p className="text-xs text-slate-600">5229 Saint Claude Ave · New Orleans, LA 70117 · (504) 354-9396</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="inline-block rounded-md border border-slate-800 bg-slate-900 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-white">
+                      {config.title}
+                    </span>
+                    {config.dateRange?.date && (
+                      <p className="mt-1 text-xs font-semibold text-slate-800">Date: {dateOnly(config.dateRange.date)}</p>
+                    )}
+                    {config.dateRange?.from && config.dateRange?.to && (
+                      <p className="mt-1 text-xs font-semibold text-slate-800">
+                        {config.dateRange.from === config.dateRange.to
+                          ? `Date: ${dateOnly(config.dateRange.from)}`
+                          : `Period: ${dateOnly(config.dateRange.from)} – ${dateOnly(config.dateRange.to)}`}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Document Body by Type */}
+            {config.type === "SINGLE_INVOICE" && <SingleInvoiceReportBody invoice={config.data} />}
             {config.type === "PAYMENTS" && <PaymentsReportBody payments={config.data} />}
             {config.type === "INVOICES" && <InvoicesReportBody invoices={config.data} />}
             {config.type.startsWith("CASH_CLOSING") && (
@@ -595,7 +629,7 @@ function LedgerReportBody({ tb }: { tb: any }) {
 }
 
 // ---------------------------------------------------------------------------
-// 6. Daily Sales Report (Overall, Tire Shop, Mufflers Shop)
+// 6. Daily Sales Report (Simple Header + Clean Table with Total, No Extra Cards)
 // ---------------------------------------------------------------------------
 function DailySalesReportBody({
   sales,
@@ -612,184 +646,177 @@ function DailySalesReportBody({
   const tax = target?.totals?.tax ?? 0;
   const gross = target?.totals?.gross ?? 0;
   const count = target?.totals?.invoiceCount ?? target?.totals?.count ?? target?.invoices?.length ?? 0;
-  const cashCollected = target?.totals?.cashCollected ?? null;
-  const paymentsCount = target?.totals?.paymentsCount ?? 0;
-  const items = target?.items || [];
-  const invoices = target?.invoices || [];
+  const invoices: any[] = target?.invoices || [];
 
   return (
-    <div className="space-y-5">
-      {/* Notice Banner */}
-      <div className={`rounded-xl border p-3 text-xs ${
-        isTire ? "border-blue-200 bg-blue-50 text-blue-900" : isMuffler ? "border-amber-200 bg-amber-50 text-amber-900" : "border-slate-200 bg-slate-50 text-slate-800"
-      }`}>
-        <p className="font-bold text-sm">
-          {isTire ? "TIRE SHOP DAILY SALES REPORT" : isMuffler ? "MUFFLERS SHOP DAILY SALES REPORT" : "CONSOLIDATED DAILY SALES REPORT"}
+    <div className="space-y-3">
+      {/* Invoices Table with Grand Total */}
+      {invoices.length === 0 ? (
+        <p className="rounded border border-slate-200 p-6 text-center text-xs text-slate-500">
+          No invoices recorded for this period.
         </p>
-        <p className="text-[11px] mt-0.5">
-          {isTire
-            ? "Separate daily sales audit for tire products, mount & balance, rotation, flat repair, and disposal fees."
-            : isMuffler
-            ? "Separate daily sales audit for muffler replacements, exhaust piping, welds, and catalytic converter installations."
-            : "Consolidated sales report combining Tire and Mufflers shops."}
-        </p>
+      ) : (
+        <table className="w-full border-collapse text-left text-xs border border-slate-300">
+          <thead>
+            <tr className="border-b-2 border-slate-300 bg-slate-100 font-bold uppercase text-slate-700">
+              <th className="py-2.5 px-3">Invoice #</th>
+              <th className="py-2.5 px-3">Date &amp; Time</th>
+              <th className="py-2.5 px-3">Customer</th>
+              <th className="py-2.5 px-3">Items &amp; Services</th>
+              <th className="py-2.5 px-3 text-right">Before Tax</th>
+              <th className="py-2.5 px-3 text-right">Tax</th>
+              <th className="py-2.5 px-3 text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200">
+            {invoices.map((inv: any) => (
+              <tr key={inv.id}>
+                <td className="py-2 px-3 font-mono font-bold text-slate-900 whitespace-nowrap">{inv.number}</td>
+                <td className="py-2 px-3 text-slate-500 whitespace-nowrap">{dateTime(inv.issuedAt)}</td>
+                <td className="py-2 px-3 font-semibold text-slate-800 whitespace-nowrap">{inv.customer}</td>
+                <td className="py-2 px-3 text-slate-600 text-[11px]">
+                  {inv.lines?.map((l: any) => `${l.quantity}x ${l.description}`).join(", ") || "—"}
+                </td>
+                <td className="py-2 px-3 text-right font-mono text-slate-700">{money(inv.net)}</td>
+                <td className="py-2 px-3 text-right font-mono text-slate-600">{money(inv.tax)}</td>
+                <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">{money(inv.total)}</td>
+              </tr>
+            ))}
+            <tr className="border-t-2 border-slate-900 bg-slate-50 font-black text-sm">
+              <td colSpan={4} className="py-3 px-3 text-right uppercase text-slate-900">
+                TOTAL ({count} {count === 1 ? "INVOICE" : "INVOICES"})
+              </td>
+              <td className="py-3 px-3 text-right font-mono text-slate-800">{money(net)}</td>
+              <td className="py-3 px-3 text-right font-mono text-slate-800">{money(tax)}</td>
+              <td className="py-3 px-3 text-right font-mono text-base font-black text-slate-950">{money(gross)}</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 6B. Formal Individual Customer Sales Invoice (Separate from Daily Report)
+// ---------------------------------------------------------------------------
+function SingleInvoiceReportBody({ invoice }: { invoice: any }) {
+  const lines: Array<{
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+    taxAmount: number;
+    lineType?: string;
+    department?: string;
+  }> = invoice?.lines || [];
+
+  const deptLabel =
+    invoice?.department === "MUFFLER"
+      ? "Mufflers Shop"
+      : invoice?.department === "TIRE"
+      ? "Tires Shop"
+      : "Tires & Mufflers Shop";
+
+  return (
+    <div className="space-y-6 text-slate-900">
+      {/* Formal Invoice Header */}
+      <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
+        <div>
+          <h1 className="font-display text-2xl font-black uppercase tracking-tight text-slate-900">
+            MARK&apos;S TIRE SHOP &amp; MUFFLER
+          </h1>
+          <p className="mt-0.5 text-xs font-medium text-slate-600">5229 Saint Claude Ave, New Orleans, LA 70117</p>
+          <p className="text-xs font-medium text-slate-600">Phone: (504) 354-9396</p>
+        </div>
+        <div className="text-right">
+          <span className="inline-block rounded-md bg-slate-900 px-3 py-1 text-xs font-black uppercase tracking-widest text-white">
+            SALES INVOICE
+          </span>
+          <p className="mt-1.5 font-mono text-xl font-black text-slate-900">{invoice?.number}</p>
+          <p className="text-xs font-medium text-slate-600">Date: {dateTime(invoice?.issuedAt)}</p>
+        </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className={`grid grid-cols-2 gap-3 ${cashCollected !== null ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
-        {cashCollected !== null && (
-          <div className="rounded-xl border border-slate-200 bg-emerald-50/40 p-3 shadow-xs">
-            <p className="text-[11px] font-bold uppercase text-emerald-800">Cash Collected</p>
-            <p className="text-xl font-black font-mono text-emerald-900">{money(cashCollected)}</p>
-            <p className="text-[10px] text-emerald-700 font-semibold">{paymentsCount} payments (Cash Basis)</p>
-          </div>
-        )}
-        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
-          <p className="text-[11px] font-bold uppercase text-slate-500">Net Sales</p>
-          <p className="text-xl font-black font-mono text-slate-900">{money(net)}</p>
-          <p className="text-[10px] text-slate-400">Excludes sales tax</p>
+      {/* Bill To & Invoice Metadata */}
+      <div className="grid grid-cols-2 gap-4 rounded-xl border border-slate-300 bg-slate-50 p-4 text-xs">
+        <div>
+          <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Bill To (Customer)</p>
+          <p className="mt-1 text-sm font-bold text-slate-900">{invoice?.customer || "Walk-in Customer"}</p>
+          <p className="mt-0.5 text-slate-600">Customer Copy — Official Sales Invoice</p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
-          <p className="text-[11px] font-bold uppercase text-slate-500">Sales Tax</p>
-          <p className="text-xl font-black font-mono text-amber-700">{money(tax)}</p>
-          <p className="text-[10px] text-slate-400">Liability tracked</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
-          <p className="text-[11px] font-bold uppercase text-slate-500">Gross Invoiced</p>
-          <p className="text-xl font-black font-mono text-teal-800">{money(gross)}</p>
-          <p className="text-[10px] text-slate-400">Total invoiced</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
-          <p className="text-[11px] font-bold uppercase text-slate-500">Tickets / Invoices</p>
-          <p className="text-xl font-black font-mono text-slate-900">{count}</p>
-          <p className="text-[10px] text-slate-400">Transactions</p>
+        <div className="text-right">
+          <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Invoice Details</p>
+          <p className="mt-1 font-semibold text-slate-800">Department: {deptLabel}</p>
+          <p className="mt-0.5 font-bold text-emerald-700">Status: {invoice?.status || "PAID IN FULL"}</p>
         </div>
       </div>
 
-      {/* Division Sub-Breakdown for Consolidated Report */}
-      {dept === "ALL" && sales?.tireShop && sales?.mufflersShop && (
-        <div className="grid grid-cols-2 gap-3 pt-1">
-          {/* Tires Division Mini Box */}
-          <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3">
-            <div className="flex items-center justify-between border-b border-blue-200 pb-1 mb-2">
-              <span className="font-bold text-xs uppercase tracking-wider text-blue-950 flex items-center gap-1">
-                <span>🛞</span> Tires Shop Division
-              </span>
-              <span className="text-[11px] font-bold text-blue-800">
-                {sales.tireShop.totals?.invoiceCount ?? sales.tireShop.invoices?.length ?? 0} Invoices
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              <div>
-                <span className="text-[10px] text-slate-500 block">Cash Collected</span>
-                <span className="font-bold font-mono text-emerald-800">
-                  {sales.tireShop.totals?.cashCollected !== null ? money(sales.tireShop.totals?.cashCollected) : "—"}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-500 block">Gross Invoiced</span>
-                <span className="font-bold font-mono text-slate-900">{money(sales.tireShop.totals?.gross ?? 0)}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-500 block">Net Sales</span>
-                <span className="font-bold font-mono text-slate-700">{money(sales.tireShop.totals?.net ?? 0)}</span>
-              </div>
-            </div>
-          </div>
+      {/* Itemized Invoice Lines Table */}
+      <div>
+        <table className="w-full border-collapse border border-slate-300 text-left text-xs">
+          <thead>
+            <tr className="border-b-2 border-slate-800 bg-slate-100 font-bold uppercase text-slate-800">
+              <th className="py-2.5 px-3 w-10">#</th>
+              <th className="py-2.5 px-3">Item / Service Description</th>
+              <th className="py-2.5 px-3 text-right w-16">Qty</th>
+              <th className="py-2.5 px-3 text-right w-28">Unit Price</th>
+              <th className="py-2.5 px-3 text-right w-24">Tax</th>
+              <th className="py-2.5 px-3 text-right w-28">Line Total</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200">
+            {lines.map((l, idx) => (
+              <tr key={idx}>
+                <td className="py-2.5 px-3 font-mono text-slate-500">{idx + 1}</td>
+                <td className="py-2.5 px-3 font-semibold text-slate-900">{l.description}</td>
+                <td className="py-2.5 px-3 text-right font-mono">{l.quantity}</td>
+                <td className="py-2.5 px-3 text-right font-mono">{money(l.unitPrice)}</td>
+                <td className="py-2.5 px-3 text-right font-mono text-slate-600">{money(l.taxAmount)}</td>
+                <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">{money(l.lineTotal)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-          {/* Mufflers Division Mini Box */}
-          <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3">
-            <div className="flex items-center justify-between border-b border-amber-200 pb-1 mb-2">
-              <span className="font-bold text-xs uppercase tracking-wider text-amber-950 flex items-center gap-1">
-                <span>🔧</span> Mufflers Shop Division
-              </span>
-              <span className="text-[11px] font-bold text-amber-800">
-                {sales.mufflersShop.totals?.invoiceCount ?? sales.mufflersShop.invoices?.length ?? 0} Invoices
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              <div>
-                <span className="text-[10px] text-slate-500 block">Cash Collected</span>
-                <span className="font-bold font-mono text-emerald-800">
-                  {sales.mufflersShop.totals?.cashCollected !== null ? money(sales.mufflersShop.totals?.cashCollected) : "—"}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-500 block">Gross Invoiced</span>
-                <span className="font-bold font-mono text-slate-900">{money(sales.mufflersShop.totals?.gross ?? 0)}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-500 block">Net Sales</span>
-                <span className="font-bold font-mono text-slate-700">{money(sales.mufflersShop.totals?.net ?? 0)}</span>
-              </div>
-            </div>
+      {/* Invoice Totals Box */}
+      <div className="flex justify-end">
+        <div className="w-72 space-y-1.5 rounded-xl border-2 border-slate-900 bg-slate-50 p-4 text-xs">
+          <div className="flex justify-between text-slate-700">
+            <span className="font-semibold">Subtotal (Before Tax):</span>
+            <span className="font-mono font-bold">{money(invoice?.net ?? 0)}</span>
+          </div>
+          <div className="flex justify-between text-slate-700">
+            <span className="font-semibold">Sales Tax:</span>
+            <span className="font-mono font-bold">{money(invoice?.tax ?? 0)}</span>
+          </div>
+          <div className="flex justify-between border-t-2 border-slate-900 pt-2 text-sm font-black text-slate-900">
+            <span>INVOICE TOTAL:</span>
+            <span className="font-mono">{money(invoice?.total ?? 0)}</span>
+          </div>
+          <div className="flex justify-between pt-1 text-[11px] font-bold text-emerald-700">
+            <span>PAYMENT STATUS:</span>
+            <span>PAID IN FULL</span>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Top Services & Items Sold */}
-      {items.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">Services &amp; Items Breakdown</h3>
-          <table className="w-full border-collapse text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600">
-                <th className="py-1.5 px-2">Item / Service Description</th>
-                <th className="py-1.5 px-2 text-center">Type</th>
-                <th className="py-1.5 px-2 text-center">Qty</th>
-                <th className="py-1.5 px-2 text-right">Tax</th>
-                <th className="py-1.5 px-2 text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {items.map((it: any, idx: number) => (
-                <tr key={idx}>
-                  <td className="py-1.5 px-2 font-medium text-slate-900">{it.description}</td>
-                  <td className="py-1.5 px-2 text-center text-slate-500 uppercase text-[10px]">{it.lineType}</td>
-                  <td className="py-1.5 px-2 text-center font-mono font-bold text-slate-700">{it.quantity}</td>
-                  <td className="py-1.5 px-2 text-right font-mono text-slate-600">{money(it.taxAmount)}</td>
-                  <td className="py-1.5 px-2 text-right font-mono font-bold text-slate-900">{money(it.lineTotal)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Signatures & Thank You Footer */}
+      <div className="mt-8 grid grid-cols-2 gap-10 pt-6 text-xs text-slate-700">
+        <div className="border-t border-slate-400 pt-1.5">
+          <p className="font-bold text-slate-900">Customer Signature</p>
+          <p className="text-[10px] text-slate-500">Work &amp; parts received in satisfactory condition.</p>
         </div>
-      )}
+        <div className="border-t border-slate-400 pt-1.5">
+          <p className="font-bold text-slate-900">Authorized Shop Representative</p>
+          <p className="text-[10px] text-slate-500">Mark&apos;s Tire Shop &amp; Muffler · (504) 354-9396</p>
+        </div>
+      </div>
 
-      {/* Invoices List */}
-      {invoices.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">Invoices &amp; Receipts ({invoices.length})</h3>
-          <table className="w-full border-collapse text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600">
-                <th className="py-1.5 px-2">Invoice #</th>
-                <th className="py-1.5 px-2">Customer</th>
-                <th className="py-1.5 px-2">Items &amp; Services</th>
-                <th className="py-1.5 px-2">Issued At</th>
-                <th className="py-1.5 px-2 text-right">Net</th>
-                <th className="py-1.5 px-2 text-right">Tax</th>
-                <th className="py-1.5 px-2 text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {invoices.map((inv: any) => (
-                <tr key={inv.id}>
-                  <td className="py-1.5 px-2 font-mono font-bold text-slate-900">{inv.number}</td>
-                  <td className="py-1.5 px-2 text-slate-800">{inv.customer}</td>
-                  <td className="py-1.5 px-2 text-slate-600 max-w-[200px] truncate text-[11px]">
-                    {inv.lines?.map((l: any) => `${l.quantity}x ${l.description}`).join(", ") || "—"}
-                  </td>
-                  <td className="py-1.5 px-2 text-slate-500">{dateTime(inv.issuedAt)}</td>
-                  <td className="py-1.5 px-2 text-right font-mono text-slate-700">{money(inv.net)}</td>
-                  <td className="py-1.5 px-2 text-right font-mono text-slate-600">{money(inv.tax)}</td>
-                  <td className="py-1.5 px-2 text-right font-mono font-bold text-slate-900">{money(inv.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <div className="border-t border-slate-200 pt-3 text-center text-xs text-slate-500">
+        Thank you for your business! Please keep this invoice for your records.
+      </div>
     </div>
   );
 }
@@ -798,9 +825,19 @@ function DailySalesReportBody({
 // 7. Invoices & Receivables Register Report
 // ---------------------------------------------------------------------------
 function InvoicesReportBody({ invoices }: { invoices: any[] }) {
+  const getBal = (inv: any) =>
+    inv.balance !== undefined
+      ? Number(inv.balance || 0)
+      : Math.max(0, (inv.total || 0) - (inv.amountPaid || 0) - (inv.amountCredited || 0));
+
+  const getPaid = (inv: any) =>
+    inv.amountPaid !== undefined
+      ? Number(inv.amountPaid || 0)
+      : Math.max(0, (inv.total || 0) - getBal(inv));
+
   const totalInvoiced = invoices.reduce((s, inv) => s + (inv.total || 0), 0);
-  const totalPaid = invoices.reduce((s, inv) => s + (inv.amountPaid || 0), 0);
-  const totalBalance = invoices.reduce((s, inv) => s + Math.max(0, (inv.total || 0) - (inv.amountPaid || 0) - (inv.amountCredited || 0)), 0);
+  const totalPaid = invoices.reduce((s, inv) => s + getPaid(inv), 0);
+  const totalBalance = invoices.reduce((s, inv) => s + getBal(inv), 0);
 
   return (
     <div className="space-y-4">
@@ -838,7 +875,8 @@ function InvoicesReportBody({ invoices }: { invoices: any[] }) {
         </thead>
         <tbody className="divide-y divide-slate-200">
           {invoices.map((inv: any) => {
-            const bal = Math.max(0, (inv.total || 0) - (inv.amountPaid || 0) - (inv.amountCredited || 0));
+            const bal = getBal(inv);
+            const paid = getPaid(inv);
             const custName = inv.customer
               ? typeof inv.customer === "string"
                 ? inv.customer
@@ -851,18 +889,18 @@ function InvoicesReportBody({ invoices }: { invoices: any[] }) {
                 <td className="py-2 px-2 text-slate-800">{custName}</td>
                 <td className="py-2 px-2">
                   <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
-                    inv.status === "PAID"
+                    bal <= 0 || inv.status === "PAID"
                       ? "bg-emerald-100 text-emerald-800"
-                      : inv.status === "PARTLY_PAID"
+                      : bal < (inv.total || 0) || inv.status === "PARTLY_PAID"
                       ? "bg-amber-100 text-amber-800"
-                      : "bg-slate-100 text-slate-700"
+                      : "bg-red-100 text-red-800"
                   }`}>
-                    {inv.status || "PAID"}
+                    {bal <= 0 ? "PAID" : bal < (inv.total || 0) ? "PARTLY PAID" : "UNPAID"}
                   </span>
                 </td>
                 <td className="py-2 px-2 text-slate-600">{dateOnly(inv.issuedAt)}</td>
                 <td className="py-2 px-2 text-right font-mono font-semibold text-slate-900">{money(inv.total)}</td>
-                <td className="py-2 px-2 text-right font-mono text-emerald-800">{money(inv.amountPaid ?? inv.total)}</td>
+                <td className="py-2 px-2 text-right font-mono text-emerald-800">{money(paid)}</td>
                 <td className="py-2 px-2 text-right font-mono font-bold text-slate-900">{money(bal)}</td>
               </tr>
             );

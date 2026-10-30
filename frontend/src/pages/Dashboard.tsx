@@ -460,87 +460,6 @@ function CounterDashboard({ data, loading, error }: DashboardProps) {
               </div>
             </div>
 
-            {sales.data && (() => {
-              const isTire = shopFilter === "TIRE";
-              const isMuffler = shopFilter === "MUFFLER";
-              const isAll = shopFilter === "ALL";
-
-              const netValue = isTire
-                ? sales.data.tireShop?.totals?.net ?? 0
-                : isMuffler
-                ? sales.data.mufflersShop?.totals?.net ?? 0
-                : sales.data.totals.net;
-
-              const taxValue = isTire
-                ? sales.data.tireShop?.totals?.tax ?? 0
-                : isMuffler
-                ? sales.data.mufflersShop?.totals?.tax ?? 0
-                : sales.data.totals.tax;
-
-              const grossValue = isTire
-                ? sales.data.tireShop?.totals?.gross ?? 0
-                : isMuffler
-                ? sales.data.mufflersShop?.totals?.gross ?? 0
-                : sales.data.totals.gross;
-
-              const netLabel = isTire
-                ? "Tires Net sales (30 days)"
-                : isMuffler
-                ? "Mufflers Net sales (30 days)"
-                : "Net sales (30 days)";
-
-              const taxLabel = isTire
-                ? "Tires Sales tax (30 days)"
-                : isMuffler
-                ? "Mufflers Sales tax (30 days)"
-                : "Sales tax (30 days)";
-
-              const grossLabel = isTire
-                ? "Tires Invoiced gross (30 days)"
-                : isMuffler
-                ? "Mufflers Invoiced gross (30 days)"
-                : "Invoiced gross (30 days)";
-
-              const netSub = isTire
-                ? `Excludes sales tax • ${sales.data.tireShop?.totals?.invoiceCount ?? 0} invoices`
-                : isMuffler
-                ? `Excludes sales tax • ${sales.data.mufflersShop?.totals?.invoiceCount ?? 0} invoices`
-                : `Tires: ${money(sales.data.tireShop?.totals?.net ?? 0)} | Mufflers: ${money(sales.data.mufflersShop?.totals?.net ?? 0)}`;
-
-              const taxSub = isTire
-                ? `Owed to state • ${sales.data.tireShop?.totals?.lineCount ?? 0} billed lines`
-                : isMuffler
-                ? `Owed to state • ${sales.data.mufflersShop?.totals?.lineCount ?? 0} billed lines`
-                : `Tires: ${money(sales.data.tireShop?.totals?.tax ?? 0)} | Mufflers: ${money(sales.data.mufflersShop?.totals?.tax ?? 0)}`;
-
-              const grossSub = isTire
-                ? "Total invoiced for Tires Shop"
-                : isMuffler
-                ? "Total invoiced for Mufflers Shop"
-                : `Tires: ${money(sales.data.tireShop?.totals?.gross ?? 0)} | Mufflers: ${money(sales.data.mufflersShop?.totals?.gross ?? 0)}`;
-
-              return (
-                <div className="mt-5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      {isTire
-                        ? "🛞 Tires Shop 30-Day Financial Performance"
-                        : isMuffler
-                        ? "🔧 Mufflers Shop 30-Day Financial Performance"
-                        : "Consolidated 30-Day Performance (Both Shops)"}
-                    </span>
-                    <span className="text-xs text-slate-400">
-                      {isAll ? "Select a shop above to isolate its revenue" : `Showing ${isTire ? "Tires" : "Mufflers"} only`}
-                    </span>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <StatTile label={netLabel} value={money(netValue)} sub={netSub} />
-                    <StatTile label={taxLabel} value={money(taxValue)} sub={taxSub} />
-                    <StatTile label={grossLabel} value={money(grossValue)} sub={grossSub} />
-                  </div>
-                </div>
-              );
-            })()}
           </>
         )}
       </DataState>
@@ -765,6 +684,22 @@ function BookingRequests({ shopFilter = "ALL" }: { shopFilter?: "ALL" | "TIRE" |
     },
   });
 
+  const remove = useMutation({
+    mutationFn: (id: string) => api.delete(`/booking-requests/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["booking-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+
+  void ({
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["booking-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["appointments"] });
+    },
+  });
+
   const allRequests = requests.data?.data ?? [];
   const filteredRequests = useMemo(() => {
     if (shopFilter === "ALL") return allRequests;
@@ -850,6 +785,18 @@ function BookingRequests({ shopFilter = "ALL" }: { shopFilter?: "ALL" | "TIRE" |
                     className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-400 hover:text-red-600"
                   >
                     Dismiss
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`Delete booking request from ${r.name}?`)) {
+                        remove.mutate(r.id);
+                      }
+                    }}
+                    disabled={remove.isPending}
+                    className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                  >
+                    Delete
                   </button>
                 </div>
               </li>

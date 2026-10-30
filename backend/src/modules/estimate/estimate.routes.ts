@@ -43,3 +43,9 @@ estimateRouter.post(
   requirePermission("estimates.write"),
   asyncHandler(estimatesController.reviseEstimate),
 );
+
+estimateRouter.delete(
+  "/:id",
+  requirePermission("estimates.write"),
+  asyncHandler(estimatesController.deleteEstimate),
+);

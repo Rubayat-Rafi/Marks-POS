@@ -29,12 +29,18 @@ import type { CatalogItem } from "../lib/types";
  */
 export function PartsCatalogPage() {
   const { can } = useAuth();
+  const queryClient = useQueryClient();
   const [q, setQ] = useState("");
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
   const [year, setYear] = useState("");
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<CatalogItem | null>(null);
+
+  const deleteCatalogItem = useMutation({
+    mutationFn: (id: string) => api.delete(`/settings/catalog/${id}`),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["parts-catalog"] }),
+  });
 
   const makes = useQuery({
     queryKey: ["ref-makes"],
@@ -150,9 +156,23 @@ export function PartsCatalogPage() {
                 </td>
                 <td className="px-3 py-2 text-right">
                   {can("parts_catalog.write") && (
-                    <Button variant="secondary" onClick={() => setEditing(item)}>
-                      Manage
-                    </Button>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="secondary" size="sm" onClick={() => setEditing(item)}>
+                        Manage
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        loading={deleteCatalogItem.isPending}
+                        onClick={() => {
+                          if (confirm(`Delete part ${item.partNumber} (${item.description})?`)) {
+                            deleteCatalogItem.mutate(item.id);
+                          }
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </div>
                   )}
                 </td>
               </tr>

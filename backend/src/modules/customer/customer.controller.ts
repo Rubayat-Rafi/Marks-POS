@@ -4,6 +4,7 @@ import { db } from "../../db.js";
 import { ApiError } from "../../middlewares/error.middleware.js";
 import { auth, tenantScope } from "../../middlewares/auth.middleware.js";
 import { auditContext, recordAudit } from "../../lib/audit.js";
+import { deleteCustomerTx } from "../../domain/deletion.js";
 
 export const customerSchema = z.object({
   firstName: z.string().min(1, "First name is required."),
@@ -194,4 +195,26 @@ export async function archiveCustomer(req: Request, res: Response) {
   });
 
   res.json(customer);
+}
+
+export async function deleteCustomer(req: Request, res: Response) {
+  const ctx = auth(req);
+  const existing = await db.customer.findFirst({
+    where: { id: req.params.id, ...tenantScope(req) },
+  });
+  if (!existing) throw ApiError.notFound("Customer not found.");
+
+  await db.$transaction(async (tx) => {
+    await deleteCustomerTx(tx, ctx.organizationId, existing.id);
+    await recordAudit(tx, {
+      organizationId: ctx.organizationId,
+      ...auditContext(req),
+      action: "customer.deleted",
+      resourceType: "customer",
+      resourceId: existing.id,
+      metadata: { name: `${existing.firstName} ${existing.lastName}` },
+    });
+  });
+
+  res.json({ success: true });
 }

@@ -59,27 +59,33 @@ type TrialBalance = {
 };
 
 const TABS = [
+  "daily sales",
   "receivables",
   "payments",
-  "cash closing",
-  "reconciliation",
   "expenses",
-  "ledger",
-  "daily sales",
+  "cash closing",
 ] as const;
 type Tab = (typeof TABS)[number];
 
+const TAB_LABELS: Record<Tab, string> = {
+  "daily sales": "Daily Sales",
+  receivables: "Invoices & Receipts",
+  payments: "Payments",
+  expenses: "Expenses",
+  "cash closing": "Cash Drawer",
+};
+
 export function FinancePage() {
-  const { can } = useAuth();
-  const [tab, setTab] = useState<Tab>("receivables");
+  const [tab, setTab] = useState<Tab>("daily sales");
   const [printConfig, setPrintConfig] = useState<PrintReportConfig | null>(null);
 
   return (
     <>
-      <PageHeader
-        title="Finance"
-        description="An operational subledger for job and payment reporting. It is not a general ledger, a tax return or an audited statement."
-      />
+      <div className="finance-screen-ui print:hidden space-y-6">
+        <PageHeader
+          title="Sales, Invoices & Cash"
+          description="View daily sales, print or download customer invoices, and manage shop payments and expenses."
+        />
 
       <div className="mb-4 flex flex-wrap gap-1 border-b border-slate-200">
         {TABS.map((t) => (
@@ -87,13 +93,13 @@ export function FinancePage() {
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium capitalize transition ${
+            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition ${
               tab === t
                 ? "border-teal-600 text-teal-700 font-bold"
                 : "border-transparent text-slate-500 hover:text-ink"
             }`}
           >
-            {t}
+            {TAB_LABELS[t]}
           </button>
         ))}
       </div>
@@ -105,24 +111,16 @@ export function FinancePage() {
       {tab === "cash closing" && (
         <CashClosing onPrint={(cfg) => setPrintConfig(cfg)} />
       )}
-      {tab === "reconciliation" && can("finance.reconcile") && (
-        <ReconciliationQueue onPrint={(data) => setPrintConfig({ type: "RECONCILIATION", title: "Reconciliation & Exceptions Report", data })} />
-      )}
-      {tab === "reconciliation" && !can("finance.reconcile") && (
-        <Notice tone="warn">Your role cannot open the reconciliation queue.</Notice>
-      )}
       {tab === "expenses" && (
         <Expenses onPrint={(expenses) => setPrintConfig({ type: "EXPENSES", title: "Operating Expenses Report", data: expenses })} />
-      )}
-      {tab === "ledger" && (
-        <Ledger onPrint={(tb) => setPrintConfig({ type: "LEDGER", title: "General Ledger Trial Balance", data: tb })} />
       )}
       {tab === "daily sales" && (
         <DailySalesSection onPrint={(cfg) => setPrintConfig(cfg)} />
       )}
+      </div>
 
       {printConfig && (
-        <PrintReportModal config={printConfig} onClose={() => setPrintConfig(null)} />
+        <PrintReportModal config={printConfig} onClose={() => setPrintConfig(null)} autoPrint={true} />
       )}
     </>
   );
@@ -154,7 +152,26 @@ function downloadFinanceCsv(filename: string, headers: string[], rows: (string |
 }
 
 function Receivables({ onPrint }: { onPrint?: (config: any) => void }) {
-  const [viewMode, setViewMode] = useState<"UNPAID" | "ALL">("UNPAID");
+  const { can } = useAuth();
+  const queryClient = useQueryClient();
+  const [viewMode, setViewMode] = useState<"UNPAID" | "ALL">("ALL");
+  const [confirmDeleteInv, setConfirmDeleteInv] = useState<{ id: string; number: string; total: number } | null>(null);
+
+  const deleteInvoiceMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/invoices/${id}`),
+    onSuccess: () => {
+      setConfirmDeleteInv(null);
+      void queryClient.invalidateQueries({ queryKey: ["receivables"] });
+      void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      void queryClient.invalidateQueries({ queryKey: ["payments"] });
+      void queryClient.invalidateQueries({ queryKey: ["daily-sales-report"] });
+      void queryClient.invalidateQueries({ queryKey: ["reports"] });
+      void queryClient.invalidateQueries({ queryKey: ["trial-balance"] });
+      void queryClient.invalidateQueries({ queryKey: ["daily-closing"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["inventory"] });
+    },
+  });
 
   const receivables = useQuery({
     queryKey: ["receivables"],
@@ -168,118 +185,21 @@ function Receivables({ onPrint }: { onPrint?: (config: any) => void }) {
 
   const data = receivables.data;
   const invoicesList = allInvoices.data?.data || [];
-  const totalSettledRevenue = invoicesList.reduce((s, inv) => s + (inv.amountPaid || 0), 0);
-
-  const handleExportCsv = () => {
-    if (viewMode === "UNPAID") {
-      const headers = ["Invoice #", "Customer", "Issued Date", "Age (Days)", "Total ($)", "Balance Due ($)"];
-      const rows = (data?.rows || []).map((r) => [
-        r.number,
-        customerLabel(r.customer),
-        dateOnly(r.issuedAt),
-        r.ageDays,
-        (r.total / 100).toFixed(2),
-        (r.balance / 100).toFixed(2),
-      ]);
-      downloadFinanceCsv(`outstanding-receivables_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
-    } else {
-      const headers = ["Invoice #", "Customer", "Status", "Issued Date", "Total ($)", "Paid ($)", "Balance Due ($)"];
-      const rows = invoicesList.map((inv) => {
-        const bal = inv.total - inv.amountPaid - inv.amountCredited;
-        const custName = inv.customer
-          ? `${inv.customer.firstName ?? ""} ${inv.customer.lastName ?? ""}`.trim() || inv.customer.companyName || "—"
-          : "—";
-        return [
-          inv.number,
-          custName,
-          inv.status,
-          dateOnly(inv.issuedAt),
-          (inv.total / 100).toFixed(2),
-          (inv.amountPaid / 100).toFixed(2),
-          (bal / 100).toFixed(2),
-        ];
-      });
-      downloadFinanceCsv(`all-invoices-register_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
-    }
-  };
 
   return (
     <DataState loading={receivables.isLoading} error={receivables.error}>
       {data && (
         <div className="space-y-5">
-          {/* Aging Buckets */}
-          <div className="grid gap-4 sm:grid-cols-5">
-            <StatTile label="Current (0-30d)" value={money(data.buckets.current)} />
-            <StatTile label="31-60 days" value={money(data.buckets.d30)} />
-            <StatTile label="61-90 days" value={money(data.buckets.d60)} tone="warn" />
-            <StatTile label="91-120 days" value={money(data.buckets.d90)} tone="warn" />
-            <StatTile label="Over 120 days" value={money(data.buckets.over90)} tone="warn" />
-          </div>
-
-          {/* Educational clarification banner when nothing is outstanding */}
-          {data.rows.length === 0 && (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-xs">
-              <div className="flex items-start gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800 text-base font-bold shadow-2xs">
-                  ✓
-                </span>
-                <div className="text-xs space-y-1">
-                  <h4 className="font-bold text-emerald-950 text-sm">
-                    All Customer Invoices Are 100% Settled ($0.00 Outstanding)
-                  </h4>
-                  <p className="text-emerald-800 leading-relaxed">
-                    <strong>Why does this show $0.00?</strong> Accounts Receivable (AR Aging) tracks{" "}
-                    <strong>unpaid customer credit</strong> and overdue debts. Because every invoice created at your
-                    shop was paid directly at checkout, there are currently <strong>0 unpaid invoices</strong> (
-                    <strong className="text-emerald-950">{money(totalSettledRevenue)}</strong> total collected across{" "}
-                    {invoicesList.length} sales).
-                  </p>
-                  <p className="text-emerald-700">
-                    If a customer selects <em>"Pay Later"</em> on the register or a Work Order is invoiced without
-                    immediate payment, it will immediately appear here with its age and balance due.
-                  </p>
-                  <div className="pt-1.5 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setViewMode("ALL")}
-                      className="font-bold text-emerald-900 underline hover:text-emerald-950 cursor-pointer"
-                    >
-                      View All Settled Invoices ({invoicesList.length}) →
-                    </button>
-                    <span className="text-emerald-400">·</span>
-                    <Link
-                      to="/reports"
-                      className="font-bold text-emerald-900 underline hover:text-emerald-950"
-                    >
-                      View Revenue Reports & Daily Sales →
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Main Card with View Mode Toggle */}
           <Card
             title={
               viewMode === "UNPAID"
-                ? `Outstanding Invoices — ${money(data.totalOutstanding)}`
-                : `All Invoices & Payment Register (${invoicesList.length} Invoices)`
+                ? `Unpaid Invoices — ${money(data.totalOutstanding)}`
+                : `All Invoices & Receipts (${invoicesList.length})`
             }
             action={
               <div className="flex items-center gap-2">
                 <div className="flex rounded-lg bg-slate-100 p-0.5 border border-slate-200 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode("UNPAID")}
-                    className={`px-2.5 py-1 rounded-md font-bold transition ${
-                      viewMode === "UNPAID"
-                        ? "bg-white text-slate-900 shadow-2xs"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Unpaid Only ({data.rows.length})
-                  </button>
                   <button
                     type="button"
                     onClick={() => setViewMode("ALL")}
@@ -291,6 +211,17 @@ function Receivables({ onPrint }: { onPrint?: (config: any) => void }) {
                   >
                     All Invoices ({invoicesList.length})
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("UNPAID")}
+                    className={`px-2.5 py-1 rounded-md font-bold transition ${
+                      viewMode === "UNPAID"
+                        ? "bg-white text-slate-900 shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Unpaid ({data.rows.length})
+                  </button>
                 </div>
                 <Button
                   variant="secondary"
@@ -298,21 +229,21 @@ function Receivables({ onPrint }: { onPrint?: (config: any) => void }) {
                   onClick={() =>
                     onPrint?.({
                       type: "INVOICES",
-                      title: viewMode === "UNPAID" ? "Outstanding Customer Receivables" : "All Invoices & Payments Register",
+                      title: viewMode === "UNPAID" ? "Unpaid Customer Invoices" : "All Invoices & Receipts Register",
                       data: viewMode === "UNPAID" ? data.rows : invoicesList,
                     })
                   }
                   className="gap-1.5 font-bold text-xs shadow-2xs"
                 >
                   <Icon name="printer" className="h-3.5 w-3.5 text-slate-700" />
-                  Print / Save PDF
+                  Print List
                 </Button>
               </div>
             }
           >
             {viewMode === "UNPAID" ? (
-              <DataState empty={data.rows.length === 0} emptyMessage="Nothing outstanding. All customer invoices are settled.">
-                <Table headers={["Invoice", "Customer", "Issued", "Age", "Total", "Balance"]}>
+              <DataState empty={data.rows.length === 0} emptyMessage="Nothing unpaid. All customer invoices are paid.">
+                <Table headers={["Invoice", "Customer", "Issued", "Age", "Total", "Balance", ""]}>
                   {data.rows.map((r) => (
                     <tr key={r.id}>
                       <td className="px-3 py-2 font-mono text-xs">
@@ -329,6 +260,31 @@ function Receivables({ onPrint }: { onPrint?: (config: any) => void }) {
                       </td>
                       <td className="px-3 py-2 tabular-nums text-slate-600">{money(r.total)}</td>
                       <td className="px-3 py-2 font-medium tabular-nums">{money(r.balance)}</td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Link
+                            to={`/receipts/${r.id}`}
+                            className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                          >
+                            Receipt
+                          </Link>
+                          <Link
+                            to={`/receipts/${r.id}?print=1`}
+                            className="rounded bg-brand px-2 py-1 text-xs font-semibold text-white hover:bg-brand-dark"
+                          >
+                            Print / PDF
+                          </Link>
+                          {can("invoices.write") && (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteInv({ id: r.id, number: r.number, total: r.total })}
+                              className="rounded bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </Table>
@@ -363,12 +319,29 @@ function Receivables({ onPrint }: { onPrint?: (config: any) => void }) {
                           )}
                         </td>
                         <td className="px-3 py-2 text-right">
-                          <Link
-                            to={`/receipts/${inv.id}`}
-                            className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
-                          >
-                            Receipt
-                          </Link>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Link
+                              to={`/receipts/${inv.id}`}
+                              className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                            >
+                              Receipt
+                            </Link>
+                            <Link
+                              to={`/receipts/${inv.id}?print=1`}
+                              className="rounded bg-brand px-2 py-1 text-xs font-semibold text-white hover:bg-brand-dark"
+                            >
+                              Print / PDF
+                            </Link>
+                            {can("invoices.write") && (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteInv({ id: inv.id, number: inv.number, total: inv.total })}
+                                className="rounded bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -377,6 +350,37 @@ function Receivables({ onPrint }: { onPrint?: (config: any) => void }) {
               </DataState>
             )}
           </Card>
+
+          {confirmDeleteInv && (
+            <Modal
+              title={`Delete Invoice ${confirmDeleteInv.number}?`}
+              onClose={() => setConfirmDeleteInv(null)}
+            >
+              <div className="space-y-4">
+                <ErrorBanner error={deleteInvoiceMutation.error} />
+                <p className="text-sm text-slate-700">
+                  Permanently delete invoice{" "}
+                  <span className="font-mono font-bold text-ink">{confirmDeleteInv.number}</span> (
+                  {money(confirmDeleteInv.total)})?
+                </p>
+                <p className="text-xs text-slate-500">
+                  This permanently deletes the invoice, its payment records, and returns any serialized inventory units sold on it back to stock.
+                </p>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="secondary" onClick={() => setConfirmDeleteInv(null)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    loading={deleteInvoiceMutation.isPending}
+                    onClick={() => deleteInvoiceMutation.mutate(confirmDeleteInv.id)}
+                  >
+                    <Icon name="trash" className="h-4 w-4" /> Delete Invoice
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+          )}
         </div>
       )}
     </DataState>
@@ -384,6 +388,7 @@ function Receivables({ onPrint }: { onPrint?: (config: any) => void }) {
 }
 
 function ReconciliationQueue({ onPrint }: { onPrint?: (data: any) => void }) {
+  const { can } = useAuth();
   const queryClient = useQueryClient();
   const [resolving, setResolving] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -403,6 +408,13 @@ function ReconciliationQueue({ onPrint }: { onPrint?: (data: any) => void }) {
     },
   });
 
+  const deleteItem = useMutation({
+    mutationFn: (id: string) => api.delete(`/finance/reconciliation/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["reconciliation"] });
+    },
+  });
+
   return (
     <DataState loading={queue.isLoading} error={queue.error}>
       <div className="space-y-4">
@@ -416,8 +428,8 @@ function ReconciliationQueue({ onPrint }: { onPrint?: (data: any) => void }) {
           title="Open exceptions"
           action={
             queue.data?.items?.length ? (
-              <Button variant="secondary" size="sm" onClick={() => onPrint?.(queue.data)}>
-                <Icon name="printer" className="h-4 w-4" /> Print Reconciliation
+              <Button variant="secondary" size="sm" onClick={() => onPrint?.(queue.data)} className="gap-1.5 font-bold text-xs shadow-xs">
+                <Icon name="printer" className="h-3.5 w-3.5 text-slate-700" /> Print / Save PDF
               </Button>
             ) : undefined
           }
@@ -443,9 +455,25 @@ function ReconciliationQueue({ onPrint }: { onPrint?: (data: any) => void }) {
                   <td className="max-w-sm px-3 py-2 text-xs text-slate-600">{item.detail}</td>
                   <td className="px-3 py-2 text-xs text-slate-500">{dateOnly(item.createdAt)}</td>
                   <td className="px-3 py-2 text-right">
-                    <Button variant="secondary" onClick={() => setResolving(item.id)}>
-                      Resolve
-                    </Button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button variant="secondary" size="sm" onClick={() => setResolving(item.id)}>
+                        Resolve
+                      </Button>
+                      {can("finance.reconcile") && (
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          loading={deleteItem.isPending}
+                          onClick={() => {
+                            if (window.confirm("Delete this reconciliation item?")) {
+                              deleteItem.mutate(item.id);
+                            }
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -498,7 +526,7 @@ type PaymentRow = {
   receivedAt: string;
   bankConfirmedAt: string | null;
   customer: { firstName: string; lastName: string };
-  allocations: Array<{ id: string; amount: number; invoice: { number: string } }>;
+  allocations: Array<{ id: string; amount: number; invoice: { id?: string; number: string } }>;
   refunds: Array<{ id: string; amount: number; status: string; reason: string }>;
 };
 
@@ -513,6 +541,7 @@ function Payments({ onPrint }: { onPrint?: (payments: PaymentRow[]) => void }) {
   const queryClient = useQueryClient();
   const [refunding, setRefunding] = useState<PaymentRow | null>(null);
   const [confirming, setConfirming] = useState<PaymentRow | null>(null);
+  const [deleting, setDeleting] = useState<PaymentRow | null>(null);
 
   const payments = useQuery({
     queryKey: ["payments"],
@@ -522,8 +551,30 @@ function Payments({ onPrint }: { onPrint?: (payments: PaymentRow[]) => void }) {
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["payments"] });
     void queryClient.invalidateQueries({ queryKey: ["receivables"] });
+    void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    void queryClient.invalidateQueries({ queryKey: ["daily-sales-report"] });
+    void queryClient.invalidateQueries({ queryKey: ["reports"] });
     void queryClient.invalidateQueries({ queryKey: ["trial-balance"] });
+    void queryClient.invalidateQueries({ queryKey: ["daily-closing"] });
+    void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    void queryClient.invalidateQueries({ queryKey: ["inventory"] });
   };
+
+  const deletePaymentMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/payments/${id}`),
+    onSuccess: () => {
+      setDeleting(null);
+      refresh();
+    },
+  });
+
+  const deleteInvoiceMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/invoices/${id}`),
+    onSuccess: () => {
+      setDeleting(null);
+      refresh();
+    },
+  });
 
   return (
     <>
@@ -531,8 +582,8 @@ function Payments({ onPrint }: { onPrint?: (payments: PaymentRow[]) => void }) {
         title="Payments received"
         action={
           payments.data?.data?.length ? (
-            <Button variant="secondary" size="sm" onClick={() => onPrint?.(payments.data.data)}>
-              <Icon name="printer" className="h-4 w-4" /> Print All Payments
+            <Button variant="secondary" size="sm" onClick={() => onPrint?.(payments.data.data)} className="gap-1.5 font-bold text-xs shadow-xs">
+              <Icon name="printer" className="h-3.5 w-3.5 text-slate-700" /> Print / Save PDF
             </Button>
           ) : undefined
         }
@@ -627,6 +678,11 @@ function Payments({ onPrint }: { onPrint?: (payments: PaymentRow[]) => void }) {
                         Refund
                       </Button>
                     )}
+                    {can("payments.collect") && (
+                      <Button variant="danger" size="sm" onClick={() => setDeleting(p)}>
+                        Delete
+                      </Button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -654,6 +710,56 @@ function Payments({ onPrint }: { onPrint?: (payments: PaymentRow[]) => void }) {
             setConfirming(null);
           }}
         />
+      )}
+      {deleting && (
+        <Modal title="Delete Payment or Entire Sale?" onClose={() => setDeleting(null)}>
+          <div className="space-y-4">
+            <ErrorBanner error={deletePaymentMutation.error || deleteInvoiceMutation.error} />
+            <p className="text-sm text-slate-700">
+              Payment of <span className="font-semibold text-slate-900">{money(deleting.amount)}</span> from{" "}
+              <span className="font-semibold text-slate-900">{customerLabel(deleting.customer)}</span>
+              {deleting.allocations.length > 0 && (
+                <> (applied to invoice {deleting.allocations.map((a) => a.invoice.number).join(", ")})</>
+              )}.
+            </p>
+
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-900 space-y-1.5">
+              <p className="font-bold">What would you like to delete?</p>
+              <ul className="list-disc list-inside space-y-1 text-amber-800">
+                <li>
+                  <strong>Delete Entire Invoice & Payment:</strong> Completely wipes the invoice and payment from all sales reports, Invoices & Receipts, and returns any sold tires/parts back to stock.
+                </li>
+                <li>
+                  <strong>Delete Payment Only:</strong> Removes just this payment receipt. The invoice remains active in Invoices & Receipts and Reports as an unpaid invoice.
+                </li>
+              </ul>
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2">
+              <Button variant="secondary" onClick={() => setDeleting(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="secondary"
+                loading={deletePaymentMutation.isPending}
+                onClick={() => deletePaymentMutation.mutate(deleting.id)}
+                className="text-xs"
+              >
+                Delete Payment Only
+              </Button>
+              {deleting.allocations.length > 0 && deleting.allocations[0]?.invoice?.id && (
+                <Button
+                  variant="danger"
+                  loading={deleteInvoiceMutation.isPending}
+                  onClick={() => deleteInvoiceMutation.mutate(deleting.allocations[0].invoice.id!)}
+                  className="text-xs font-bold"
+                >
+                  <Icon name="trash" className="h-4 w-4" /> Delete Entire Invoice & Payment
+                </Button>
+              )}
+            </div>
+          </div>
+        </Modal>
       )}
     </>
   );
@@ -872,6 +978,11 @@ function CashClosing({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => void }
     },
   });
 
+  const deleteSession = useMutation({
+    mutationFn: (id: string) => api.delete(`/finance/cash-sessions/${id}`),
+    onSuccess: refresh,
+  });
+
   const current = sessions.data?.open ?? null;
   const closingData = dailyClosing.data;
   const tireClosing = closingData?.tireShop;
@@ -908,8 +1019,9 @@ function CashClosing({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => void }
                     dateRange: { date: closingDate },
                   })
                 }
+                className="gap-1.5 font-bold text-xs"
               >
-                <Icon name="printer" className="h-4 w-4 text-blue-600" /> Print Tire Shop Closing
+                <Icon name="printer" className="h-4 w-4 text-emerald-700" /> Print Tires Closing (PDF)
               </Button>
               <Button
                 variant="secondary"
@@ -922,8 +1034,9 @@ function CashClosing({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => void }
                     dateRange: { date: closingDate },
                   })
                 }
+                className="gap-1.5 font-bold text-xs"
               >
-                <Icon name="printer" className="h-4 w-4 text-amber-600" /> Print Mufflers Shop Closing
+                <Icon name="printer" className="h-4 w-4 text-orange-700" /> Print Mufflers Closing (PDF)
               </Button>
               <Button
                 variant="secondary"
@@ -936,8 +1049,9 @@ function CashClosing({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => void }
                     dateRange: { date: closingDate },
                   })
                 }
+                className="gap-1.5 font-bold text-xs"
               >
-                <Icon name="printer" className="h-4 w-4 text-slate-700" /> Print Drawer Closing
+                <Icon name="printer" className="h-4 w-4 text-slate-700" /> Print Combined Closing (PDF)
               </Button>
             </div>
           </div>
@@ -1097,7 +1211,7 @@ function CashClosing({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => void }
             emptyMessage="No closed sessions yet."
           >
             <Table
-              headers={["Opened", "Closed", "Float", "Expected", "Counted", "Variance", "Note"]}
+              headers={["Opened", "Closed", "Float", "Expected", "Counted", "Variance", "Note", ""]}
             >
               {sessions.data?.data
                 .filter((s) => s.closedAt)
@@ -1121,6 +1235,21 @@ function CashClosing({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => void }
                     </td>
                     <td className="max-w-xs truncate px-3 py-2 text-xs text-slate-500">
                       {s.note ?? "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {can("finance.reconcile") && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm("Delete this cash session record?")) {
+                              deleteSession.mutate(s.id);
+                            }
+                          }}
+                          className="rounded bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1173,6 +1302,15 @@ function Expenses({ onPrint }: { onPrint?: (expenses: any[]) => void }) {
     },
   });
 
+  const deleteExpense = useMutation({
+    mutationFn: (id: string) => api.delete(`/finance/expenses/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      void queryClient.invalidateQueries({ queryKey: ["trial-balance"] });
+      void queryClient.invalidateQueries({ queryKey: ["daily-closing"] });
+    },
+  });
+
   return (
     <>
       <Card
@@ -1180,8 +1318,8 @@ function Expenses({ onPrint }: { onPrint?: (expenses: any[]) => void }) {
         action={
           <div className="flex items-center gap-2">
             {expenses.data?.data?.length ? (
-              <Button variant="secondary" size="sm" onClick={() => onPrint?.(expenses.data.data)}>
-                <Icon name="printer" className="h-4 w-4" /> Print Expenses
+              <Button variant="secondary" size="sm" onClick={() => onPrint?.(expenses.data.data)} className="gap-1.5 font-bold text-xs shadow-xs">
+                <Icon name="printer" className="h-3.5 w-3.5 text-slate-700" /> Print / Save PDF
               </Button>
             ) : null}
             {can("expenses.write") && (
@@ -1198,7 +1336,7 @@ function Expenses({ onPrint }: { onPrint?: (expenses: any[]) => void }) {
           empty={expenses.data?.data.length === 0}
           emptyMessage="No expenses recorded."
         >
-          <Table headers={["Date", "Category", "Vendor", "Paid from", "Amount"]}>
+          <Table headers={["Date", "Category", "Vendor", "Paid from", "Amount", ""]}>
             {expenses.data?.data.map((e) => (
               <tr key={e.id}>
                 <td className="px-3 py-2 text-slate-600">{dateOnly(e.incurredOn)}</td>
@@ -1208,6 +1346,21 @@ function Expenses({ onPrint }: { onPrint?: (expenses: any[]) => void }) {
                   {e.isCash ? "Cash drawer" : "Accounts payable"}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums">{money(e.amount)}</td>
+                <td className="px-3 py-2 text-right">
+                  {can("expenses.write") && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`Delete expense "${e.vendor}" (${money(e.amount)})?`)) {
+                          deleteExpense.mutate(e.id);
+                        }
+                      }}
+                      className="rounded bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </Table>
@@ -1287,8 +1440,8 @@ function Ledger({ onPrint }: { onPrint?: (tb: TrialBalance) => void }) {
         <Card
           title="Trial balance"
           action={
-            <Button variant="secondary" size="sm" onClick={() => onPrint?.(tb.data)}>
-              <Icon name="printer" className="h-4 w-4" /> Print Ledger / Trial Balance
+            <Button variant="secondary" size="sm" onClick={() => onPrint?.(tb.data)} className="gap-1.5 font-bold text-xs shadow-xs">
+              <Icon name="printer" className="h-3.5 w-3.5 text-slate-700" /> Print / Save PDF
             </Button>
           }
         >
@@ -1331,50 +1484,77 @@ function Ledger({ onPrint }: { onPrint?: (tb: TrialBalance) => void }) {
   );
 }
 
-function toShopDateString(d: Date, timeZone = "America/Chicago"): string {
-  try {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(d);
-  } catch {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  }
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function toLocalStartIso(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  if (!y || !m || !d) return new Date().toISOString();
+  return new Date(y, m - 1, d, 0, 0, 0, 0).toISOString();
+}
+
+function toLocalEndIso(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  if (!y || !m || !d) return new Date().toISOString();
+  return new Date(y, m - 1, d + 1, 0, 0, 0, 0).toISOString();
 }
 
 function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => void }) {
-  const { user } = useAuth();
-  const shopTimezone = user?.organization?.timezone || "America/Chicago";
+  const { can } = useAuth();
+  const queryClient = useQueryClient();
   const [departmentView, setDepartmentView] = useState<"ALL" | "TIRE" | "MUFFLER">("ALL");
-  const [activePreset, setActivePreset] = useState<number | "custom">(0);
-  const [from, setFrom] = useState(() => toShopDateString(new Date(), shopTimezone));
-  const [to, setTo] = useState(() => toShopDateString(new Date(), shopTimezone));
+  const [activePreset, setActivePreset] = useState<number | "all" | "custom">(0);
+  const [from, setFrom] = useState(() => toLocalDateStr(new Date()));
+  const [to, setTo] = useState(() => toLocalDateStr(new Date()));
+  const [confirmDeleteInv, setConfirmDeleteInv] = useState<{ id: string; number: string; total: number } | null>(null);
 
-  const salesQuery = useQuery({
-    queryKey: ["daily-sales-report", from, to],
-    queryFn: () => api.get<any>(`/reports/daily-sales?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+  const deleteInvoiceMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/invoices/${id}`),
+    onSuccess: () => {
+      setConfirmDeleteInv(null);
+      void queryClient.invalidateQueries({ queryKey: ["daily-sales-report"] });
+      void queryClient.invalidateQueries({ queryKey: ["receivables"] });
+      void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      void queryClient.invalidateQueries({ queryKey: ["payments"] });
+      void queryClient.invalidateQueries({ queryKey: ["reports"] });
+      void queryClient.invalidateQueries({ queryKey: ["trial-balance"] });
+      void queryClient.invalidateQueries({ queryKey: ["daily-closing"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["inventory"] });
+    },
   });
 
-  const setRangePreset = (days: number) => {
+  const fromIso = useMemo(() => toLocalStartIso(from), [from]);
+  const toIso = useMemo(() => toLocalEndIso(to), [to]);
+
+  const salesQuery = useQuery({
+    queryKey: ["daily-sales-report", fromIso, toIso],
+    queryFn: () =>
+      api.get<any>(`/reports/daily-sales?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`),
+  });
+
+  const setRangePreset = (days: number | "all") => {
     setActivePreset(days);
     const now = new Date();
-    const todayStr = toShopDateString(now, shopTimezone);
-    if (days === 0) {
+    const todayStr = toLocalDateStr(now);
+    if (days === "all") {
+      setFrom("2020-01-01");
+      setTo(todayStr);
+    } else if (days === 0) {
       setFrom(todayStr);
       setTo(todayStr);
     } else if (days === 1) {
-      const yest = new Date(now.getTime() - 86_400_000);
-      const yestStr = toShopDateString(yest, shopTimezone);
+      const yest = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      const yestStr = toLocalDateStr(yest);
       setFrom(yestStr);
       setTo(yestStr);
     } else {
-      const start = new Date(now.getTime() - days * 86_400_000);
-      setFrom(toShopDateString(start, shopTimezone));
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
+      setFrom(toLocalDateStr(start));
       setTo(todayStr);
     }
   };
@@ -1389,31 +1569,23 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
       {/* Date controls and Print Action Header */}
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 className="text-base font-bold text-slate-900">Daily Sales &amp; Department Performance</h2>
-            <p className="text-xs text-slate-500">
-              Complete invoice registers and separated sales accounting for Tire and Muffler shops.
-            </p>
-          </div>
-
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 mr-1 flex items-center gap-1">
-              <Icon name="calendar" className="h-4 w-4 text-slate-400" />
-              Quick Ranges:
-            </span>
-            {[
-              { label: "Today", days: 0 },
-              { label: "Yesterday", days: 1 },
-              { label: "Last 7 Days", days: 7 },
-              { label: "Last 30 Days", days: 30 },
-            ].map((p) => (
+            {(
+              [
+                { label: "Today", days: 0 },
+                { label: "Yesterday", days: 1 },
+                { label: "Last 7 Days", days: 7 },
+                { label: "Last 30 Days", days: 30 },
+                { label: "All Sales", days: "all" },
+              ] as const
+            ).map((p) => (
               <button
                 key={p.label}
                 type="button"
                 onClick={() => setRangePreset(p.days)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                   activePreset === p.days
-                    ? "bg-brand-600 text-white shadow-2xs"
+                    ? "bg-ink text-white shadow-2xs"
                     : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                 }`}
               >
@@ -1425,9 +1597,13 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
               <input
                 type="date"
                 value={from}
+                max={to}
                 onChange={(e) => {
+                  const val = e.target.value;
+                  if (!val) return;
                   setActivePreset("custom");
-                  setFrom(e.target.value);
+                  setFrom(val);
+                  if (val > to) setTo(val);
                 }}
                 className="h-8 rounded-md border border-slate-300 px-2 text-xs"
                 aria-label="Start Date"
@@ -1436,100 +1612,34 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
               <input
                 type="date"
                 value={to}
+                min={from}
                 onChange={(e) => {
+                  const val = e.target.value;
+                  if (!val) return;
                   setActivePreset("custom");
-                  setTo(e.target.value);
+                  setTo(val);
+                  if (val < from) setFrom(val);
                 }}
                 className="h-8 rounded-md border border-slate-300 px-2 text-xs"
                 aria-label="End Date"
               />
-              <span className="text-[11px] text-slate-400 font-medium">({shopTimezone})</span>
             </div>
           </div>
-        </div>
 
-        {/* Separated Print Buttons Bar */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-          <div className="flex items-center gap-1 rounded-2xl bg-white p-1 border border-slate-200 shadow-sm">
-            <button
-              type="button"
-              onClick={() => setDepartmentView("ALL")}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
-                departmentView === "ALL"
-                  ? SHOP_PALETTES.ALL.activeTabClass
-                  : SHOP_PALETTES.ALL.inactiveTabClass
-              }`}
-            >
-              <Icon name="store" className="h-3.5 w-3.5" /> All Departments
-            </button>
-            <button
-              type="button"
-              onClick={() => setDepartmentView("TIRE")}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
-                departmentView === "TIRE"
-                  ? SHOP_PALETTES.TIRE.activeTabClass
-                  : SHOP_PALETTES.TIRE.inactiveTabClass
-              }`}
-            >
-              <Icon name="tire" className="h-3.5 w-3.5" /> Tire Shop Sales
-            </button>
-            <button
-              type="button"
-              onClick={() => setDepartmentView("MUFFLER")}
-              className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
-                departmentView === "MUFFLER"
-                  ? SHOP_PALETTES.MUFFLER.activeTabClass
-                  : SHOP_PALETTES.MUFFLER.inactiveTabClass
-              }`}
-            >
-              <Icon name="pipe" className="h-3.5 w-3.5" /> Mufflers Shop Sales
-            </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                onPrint?.({
-                  type: "DAILY_SALES_TIRE",
-                  title: "Tire Shop Daily Sales Report",
-                  data,
-                  dateRange: { from, to },
-                })
-              }
-            >
-              <Icon name="printer" className="h-4 w-4 text-emerald-700" /> Print / Save PDF (Tire Shop)
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                onPrint?.({
-                  type: "DAILY_SALES_MUFFLER",
-                  title: "Mufflers Shop Daily Sales Report",
-                  data,
-                  dateRange: { from, to },
-                })
-              }
-            >
-              <Icon name="printer" className="h-4 w-4 text-amber-700" /> Print / Save PDF (Mufflers)
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                onPrint?.({
-                  type: "DAILY_SALES_ALL",
-                  title: "Consolidated Daily Sales Report",
-                  data,
-                  dateRange: { from, to },
-                })
-              }
-            >
-              <Icon name="printer" className="h-4 w-4 text-slate-700" /> Print / Save PDF (All Sales)
-            </Button>
-          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() =>
+              onPrint?.({
+                type: "DAILY_SALES_ALL",
+                title: "Daily Sales Report",
+                data,
+                dateRange: { from, to },
+              })
+            }
+          >
+            <Icon name="printer" className="h-4 w-4" /> Print Daily Sales (PDF)
+          </Button>
         </div>
       </Card>
 
@@ -1714,21 +1824,6 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
               </div>
             </div>
 
-            {/* Daily Chronological Summary — Combined */}
-            <Card title="All Shops — Daily Sales Summary">
-              <Table headers={["Date", "Invoices", "Net Sales", "Sales Tax", "Gross Revenue"]}>
-                {data?.days?.map((d: any) => (
-                  <tr key={d.date}>
-                    <td className="px-3 py-2 font-medium">{dateOnly(d.date)}</td>
-                    <td className="px-3 py-2 text-slate-600">{d.count}</td>
-                    <td className="px-3 py-2 tabular-nums">{money(d.net)}</td>
-                    <td className="px-3 py-2 tabular-nums text-slate-600">{money(d.tax)}</td>
-                    <td className="px-3 py-2 tabular-nums font-semibold">{money(d.gross)}</td>
-                  </tr>
-                ))}
-              </Table>
-            </Card>
-
             {/* Consolidated Invoices List */}
             {data?.invoices && data.invoices.length > 0 && (
               <Card title={`All Shops — Invoices & Receipts (${data.invoices.length})`}>
@@ -1749,9 +1844,23 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
                         {money(inv.total)}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <Link to={`/receipts/${inv.id}`} className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200">
-                          Receipt
-                        </Link>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Link to={`/receipts/${inv.id}`} className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200">
+                            Receipt
+                          </Link>
+                          <Link to={`/receipts/${inv.id}?print=1`} className="rounded bg-brand px-2 py-1 text-xs font-semibold text-white hover:bg-brand-dark">
+                            Print / PDF
+                          </Link>
+                          {can("invoices.write") && (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteInv({ id: inv.id, number: inv.number, total: inv.total })}
+                              className="rounded bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1777,49 +1886,30 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
                       ? money(tireShop.totals.cashCollected)
                       : "—"}
                   </span>
-                  <span className="text-[10px] text-slate-400 block">{tireShop?.totals?.paymentsCount ?? 0} payments (Cash Basis)</span>
+                  <span className="text-[10px] text-slate-400 block">{tireShop?.totals?.paymentsCount ?? 0} payments</span>
                 </div>
                 <div className="rounded-lg bg-white border border-emerald-100 p-3">
-                  <span className="text-[11px] font-medium text-slate-500 block">Gross Invoiced</span>
+                  <span className="text-[11px] font-medium text-slate-500 block">Total Sales</span>
                   <span className="font-bold font-mono text-lg text-emerald-950">{money(tireShop?.totals?.gross ?? 0)}</span>
-                  <span className="text-[10px] text-slate-400 block">Total invoiced</span>
                 </div>
                 <div className="rounded-lg bg-white border border-emerald-100 p-3">
-                  <span className="text-[11px] font-medium text-slate-500 block">Net Sales</span>
+                  <span className="text-[11px] font-medium text-slate-500 block">Before Tax</span>
                   <span className="font-bold font-mono text-lg text-emerald-900">{money(tireShop?.totals?.net ?? 0)}</span>
-                  <span className="text-[10px] text-slate-400 block">Excludes sales tax</span>
                 </div>
                 <div className="rounded-lg bg-white border border-emerald-100 p-3">
                   <span className="text-[11px] font-medium text-slate-500 block">Sales Tax</span>
                   <span className="font-bold font-mono text-lg text-emerald-700">{money(tireShop?.totals?.tax ?? 0)}</span>
-                  <span className="text-[10px] text-slate-400 block">Tax liability</span>
                 </div>
                 <div className="rounded-lg bg-white border border-emerald-100 p-3">
                   <span className="text-[11px] font-medium text-slate-500 block">Invoices</span>
                   <span className="font-bold font-mono text-lg text-emerald-900">{tireShop?.totals?.invoiceCount ?? 0}</span>
-                  <span className="text-[10px] text-slate-400 block">{tireShop?.totals?.lineCount ?? 0} services rendered</span>
                 </div>
               </div>
             </div>
 
-            {/* Tire Items / Services Breakdown */}
-            <Card title="Top Tire Items & Services Sold">
-              <Table headers={["Item / Service", "Type", "Units Sold", "Total Sales", "Tax Attributed"]}>
-                {tireShop?.items?.map((item: any) => (
-                  <tr key={item.description}>
-                    <td className="px-3 py-2 font-medium text-slate-900">{item.description}</td>
-                    <td className="px-3 py-2 text-xs text-slate-500">{item.lineType}</td>
-                    <td className="px-3 py-2 tabular-nums font-mono">{item.quantity}</td>
-                    <td className="px-3 py-2 tabular-nums font-semibold text-emerald-700">{money(item.lineTotal)}</td>
-                    <td className="px-3 py-2 tabular-nums text-slate-500">{money(item.taxAmount)}</td>
-                  </tr>
-                ))}
-              </Table>
-            </Card>
-
             {/* Tire Invoices Register */}
             <Card
-              title="Tire Shop Invoices Register"
+              title="Tire Shop Invoices & Receipts"
               action={
                 <Button
                   variant="secondary"
@@ -1837,11 +1927,15 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
                 </Button>
               }
             >
-              <Table headers={["Date", "Invoice #", "Customer", "Tire Services", "Net", "Tax", "Total"]}>
+              <Table headers={["Date", "Invoice #", "Customer", "Tire Services", "Net", "Tax", "Total", ""]}>
                 {tireShop?.invoices?.map((inv: any) => (
                   <tr key={inv.id}>
                     <td className="px-3 py-2 text-xs text-slate-600">{dateOnly(inv.issuedAt)}</td>
-                    <td className="px-3 py-2 font-mono text-xs font-bold text-emerald-700">{inv.number}</td>
+                    <td className="px-3 py-2 font-mono text-xs font-bold text-emerald-700">
+                      <Link to={`/receipts/${inv.id}`} className="hover:underline">
+                        {inv.number}
+                      </Link>
+                    </td>
                     <td className="px-3 py-2 text-sm">{inv.customer}</td>
                     <td className="px-3 py-2 text-xs text-slate-600 max-w-xs">
                       {inv.lines.map((l: any) => `${l.quantity}x ${l.description}`).join(", ")}
@@ -1849,6 +1943,25 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
                     <td className="px-3 py-2 tabular-nums">{money(inv.net)}</td>
                     <td className="px-3 py-2 tabular-nums text-slate-500">{money(inv.tax)}</td>
                     <td className="px-3 py-2 tabular-nums font-bold text-slate-900">{money(inv.total)}</td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Link to={`/receipts/${inv.id}`} className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200">
+                          Receipt
+                        </Link>
+                        <Link to={`/receipts/${inv.id}?print=1`} className="rounded bg-brand px-2 py-1 text-xs font-semibold text-white hover:bg-brand-dark">
+                          Print / PDF
+                        </Link>
+                        {can("invoices.write") && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteInv({ id: inv.id, number: inv.number, total: inv.total })}
+                            className="rounded bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </Table>
@@ -1872,49 +1985,30 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
                       ? money(mufflersShop.totals.cashCollected)
                       : "—"}
                   </span>
-                  <span className="text-[10px] text-slate-400 block">{mufflersShop?.totals?.paymentsCount ?? 0} payments (Cash Basis)</span>
+                  <span className="text-[10px] text-slate-400 block">{mufflersShop?.totals?.paymentsCount ?? 0} payments</span>
                 </div>
                 <div className="rounded-lg bg-white border border-orange-100 p-3">
-                  <span className="text-[11px] font-medium text-slate-500 block">Gross Invoiced</span>
+                  <span className="text-[11px] font-medium text-slate-500 block">Total Sales</span>
                   <span className="font-bold font-mono text-lg text-orange-950">{money(mufflersShop?.totals?.gross ?? 0)}</span>
-                  <span className="text-[10px] text-slate-400 block">Total invoiced</span>
                 </div>
                 <div className="rounded-lg bg-white border border-orange-100 p-3">
-                  <span className="text-[11px] font-medium text-slate-500 block">Net Sales</span>
+                  <span className="text-[11px] font-medium text-slate-500 block">Before Tax</span>
                   <span className="font-bold font-mono text-lg text-orange-900">{money(mufflersShop?.totals?.net ?? 0)}</span>
-                  <span className="text-[10px] text-slate-400 block">Excludes sales tax</span>
                 </div>
                 <div className="rounded-lg bg-white border border-orange-100 p-3">
                   <span className="text-[11px] font-medium text-slate-500 block">Sales Tax</span>
                   <span className="font-bold font-mono text-lg text-orange-700">{money(mufflersShop?.totals?.tax ?? 0)}</span>
-                  <span className="text-[10px] text-slate-400 block">Tax liability</span>
                 </div>
                 <div className="rounded-lg bg-white border border-orange-100 p-3">
                   <span className="text-[11px] font-medium text-slate-500 block">Invoices</span>
                   <span className="font-bold font-mono text-lg text-orange-900">{mufflersShop?.totals?.invoiceCount ?? 0}</span>
-                  <span className="text-[10px] text-slate-400 block">{mufflersShop?.totals?.lineCount ?? 0} services rendered</span>
                 </div>
               </div>
             </div>
 
-            {/* Mufflers Items / Services Breakdown */}
-            <Card title="Top Muffler Items & Services Sold">
-              <Table headers={["Item / Service", "Type", "Units Sold", "Total Sales", "Tax Attributed"]}>
-                {mufflersShop?.items?.map((item: any) => (
-                  <tr key={item.description}>
-                    <td className="px-3 py-2 font-medium text-slate-900">{item.description}</td>
-                    <td className="px-3 py-2 text-xs text-slate-500">{item.lineType}</td>
-                    <td className="px-3 py-2 tabular-nums font-mono">{item.quantity}</td>
-                    <td className="px-3 py-2 tabular-nums font-semibold text-emerald-700">{money(item.lineTotal)}</td>
-                    <td className="px-3 py-2 tabular-nums text-slate-500">{money(item.taxAmount)}</td>
-                  </tr>
-                ))}
-              </Table>
-            </Card>
-
             {/* Mufflers Invoices Register */}
             <Card
-              title="Mufflers Shop Invoices Register"
+              title="Mufflers Shop Invoices & Receipts"
               action={
                 <Button
                   variant="secondary"
@@ -1932,11 +2026,15 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
                 </Button>
               }
             >
-              <Table headers={["Date", "Invoice #", "Customer", "Muffler Services", "Net", "Tax", "Total"]}>
+              <Table headers={["Date", "Invoice #", "Customer", "Muffler Services", "Net", "Tax", "Total", ""]}>
                 {mufflersShop?.invoices?.map((inv: any) => (
                   <tr key={inv.id}>
                     <td className="px-3 py-2 text-xs text-slate-600">{dateOnly(inv.issuedAt)}</td>
-                    <td className="px-3 py-2 font-mono text-xs font-bold text-amber-800">{inv.number}</td>
+                    <td className="px-3 py-2 font-mono text-xs font-bold text-amber-800">
+                      <Link to={`/receipts/${inv.id}`} className="hover:underline">
+                        {inv.number}
+                      </Link>
+                    </td>
                     <td className="px-3 py-2 text-sm">{inv.customer}</td>
                     <td className="px-3 py-2 text-xs text-slate-600 max-w-xs">
                       {inv.lines.map((l: any) => `${l.quantity}x ${l.description}`).join(", ")}
@@ -1944,6 +2042,25 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
                     <td className="px-3 py-2 tabular-nums">{money(inv.net)}</td>
                     <td className="px-3 py-2 tabular-nums text-slate-500">{money(inv.tax)}</td>
                     <td className="px-3 py-2 tabular-nums font-bold text-slate-900">{money(inv.total)}</td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Link to={`/receipts/${inv.id}`} className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200">
+                          Receipt
+                        </Link>
+                        <Link to={`/receipts/${inv.id}?print=1`} className="rounded bg-brand px-2 py-1 text-xs font-semibold text-white hover:bg-brand-dark">
+                          Print / PDF
+                        </Link>
+                        {can("invoices.write") && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteInv({ id: inv.id, number: inv.number, total: inv.total })}
+                            className="rounded bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </Table>
@@ -1951,6 +2068,37 @@ function DailySalesSection({ onPrint }: { onPrint?: (cfg: PrintReportConfig) => 
           </div>
         )}
       </DataState>
+
+      {confirmDeleteInv && (
+        <Modal
+          title={`Delete Invoice ${confirmDeleteInv.number}?`}
+          onClose={() => setConfirmDeleteInv(null)}
+        >
+          <div className="space-y-4">
+            <ErrorBanner error={deleteInvoiceMutation.error} />
+            <p className="text-sm text-slate-700">
+              Permanently delete invoice{" "}
+              <span className="font-mono font-bold text-ink">{confirmDeleteInv.number}</span> (
+              {money(confirmDeleteInv.total)})?
+            </p>
+            <p className="text-xs text-slate-500">
+              This permanently removes the invoice, its payment records, and returns any serialized inventory units sold on it back to stock.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="secondary" onClick={() => setConfirmDeleteInv(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                loading={deleteInvoiceMutation.isPending}
+                onClick={() => deleteInvoiceMutation.mutate(confirmDeleteInv.id)}
+              >
+                <Icon name="trash" className="h-4 w-4" /> Delete Invoice
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

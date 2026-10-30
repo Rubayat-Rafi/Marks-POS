@@ -86,7 +86,7 @@ export function JobInspection({
       >
         <div className="space-y-4">
           {inspections.map((inspection) => (
-            <InspectionView key={inspection.id} inspection={inspection} />
+            <InspectionView key={inspection.id} jobId={jobId} inspection={inspection} />
           ))}
         </div>
       </DataState>
@@ -94,11 +94,18 @@ export function JobInspection({
   );
 }
 
-function InspectionView({ inspection }: { inspection: Inspection }) {
+function InspectionView({ jobId, inspection }: { jobId: string; inspection: Inspection }) {
+  const { can } = useAuth();
+  const queryClient = useQueryClient();
   const categories = [...new Set(inspection.items.map((i) => i.category))];
   const urgent = inspection.items.filter((i) => i.result === "URGENT");
   const advise = inspection.items.filter((i) => i.result === "ADVISE");
   const allKeys = inspection.items.flatMap((i) => i.photoKeys);
+
+  const deleteInspection = useMutation({
+    mutationFn: () => api.delete(`/repair-orders/inspections/${inspection.id}`),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["job", jobId] }),
+  });
 
   // Photo links are signed and short-lived, so they are fetched when the
   // inspection is actually viewed rather than stored in the record.
@@ -120,7 +127,7 @@ function InspectionView({ inspection }: { inspection: Inspection }) {
               : "In progress"}
           </p>
         </div>
-        <div className="flex gap-2 text-xs">
+        <div className="flex items-center gap-2 text-xs">
           {urgent.length > 0 && (
             <span className="rounded bg-red-100 px-2 py-0.5 font-medium text-red-800">
               {urgent.length} urgent
@@ -131,8 +138,19 @@ function InspectionView({ inspection }: { inspection: Inspection }) {
               {advise.length} advise
             </span>
           )}
+          {can("inspections.write") && (
+            <Button
+              variant="danger"
+              size="sm"
+              loading={deleteInspection.isPending}
+              onClick={() => deleteInspection.mutate()}
+            >
+              Delete
+            </Button>
+          )}
         </div>
       </div>
+      <ErrorBanner error={deleteInspection.error} />
 
       {categories.map((category) => (
         <div key={category} className="mb-3">

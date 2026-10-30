@@ -520,6 +520,57 @@ export const deleteFitment = async (req: Request, res: Response) => {
   res.status(204).send();
 };
 
+export const deleteCatalogItem = async (req: Request, res: Response) => {
+  const ctx = auth(req);
+  const existing = await db.catalogItem.findFirst({
+    where: { id: req.params.id, ...tenantScope(req) },
+  });
+  if (!existing) throw ApiError.notFound("Part not found.");
+
+  await db.$transaction(async (tx) => {
+    await tx.estimateLine.updateMany({
+      where: { catalogItemId: existing.id },
+      data: { catalogItemId: null },
+    });
+    await tx.jobPartUsage.updateMany({
+      where: { catalogItemId: existing.id },
+      data: { catalogItemId: null },
+    });
+    await tx.partFitment.deleteMany({ where: { catalogItemId: existing.id } });
+    await tx.catalogItem.delete({ where: { id: existing.id } });
+    await recordAudit(tx, {
+      organizationId: ctx.organizationId,
+      ...auditContext(req),
+      action: "catalog.item_deleted",
+      resourceType: "catalog_item",
+      resourceId: existing.id,
+      metadata: { partNumber: existing.partNumber, description: existing.description },
+    });
+  });
+
+  res.json({ success: true });
+};
+
+export const deleteLaborRate = async (req: Request, res: Response) => {
+  const ctx = auth(req);
+  const rate = await db.laborRate.findFirst({
+    where: { id: req.params.id, ...tenantScope(req) },
+  });
+  if (!rate) throw ApiError.notFound("Labor rate not found.");
+
+  await db.laborRate.delete({ where: { id: rate.id } });
+  await recordAudit(db, {
+    organizationId: ctx.organizationId,
+    ...auditContext(req),
+    action: "settings.labor_rate_deleted",
+    resourceType: "labor_rate",
+    resourceId: rate.id,
+    metadata: { name: rate.name },
+  });
+
+  res.json({ success: true });
+};
+
 export const listAuditTrail = async (req: Request, res: Response) => {
   const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || "25"), 10) || 25));
@@ -619,6 +670,10 @@ export const clearAllData = async (req: Request, res: Response) => {
 
     // 3. Finance & Accounting: Reconciliation, Cash Sessions, Expenses, Ledger entries
     await tx.reconciliationItem.deleteMany({ where: { organizationId: orgId } });
+    await tx.journalEntry.updateMany({
+      where: { organizationId: orgId },
+      data: { reversesId: null },
+    });
     await tx.journalLine.deleteMany({
       where: { journalEntry: { organizationId: orgId } },
     });

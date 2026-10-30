@@ -414,12 +414,46 @@ export const deleteProduct = async (req: Request, res: Response) => {
   const product = await db.inventoryProduct.findFirst({
     where: { id: req.params.id, ...tenantScope(req) },
   });
-  if (!product) throw ApiError.notFound('Item not found.');
-  
-  await db.inventoryProduct.update({
-    where: { id: product.id },
-    data: { isActive: false },
+  if (!product) throw ApiError.notFound("Item not found.");
+
+  await db.$transaction(async (tx) => {
+    await tx.inventoryUnit.deleteMany({
+      where: { productId: product.id, organizationId: ctx.organizationId },
+    });
+    await tx.inventoryProduct.delete({
+      where: { id: product.id },
+    });
+    await recordAudit(tx, {
+      organizationId: ctx.organizationId,
+      ...auditContext(req),
+      action: "inventory.product_deleted",
+      resourceType: "inventory_product",
+      resourceId: product.id,
+      metadata: { name: product.name, brand: product.brand, size: product.size },
+    });
   });
-  
+
+  res.json({ success: true });
+};
+
+export const deleteUnit = async (req: Request, res: Response) => {
+  const ctx = auth(req);
+  const unit = await db.inventoryUnit.findFirst({
+    where: { id: req.params.id, ...tenantScope(req) },
+  });
+  if (!unit) throw ApiError.notFound("Item not found.");
+
+  await db.$transaction(async (tx) => {
+    await tx.inventoryUnit.delete({ where: { id: unit.id } });
+    await recordAudit(tx, {
+      organizationId: ctx.organizationId,
+      ...auditContext(req),
+      action: "inventory.unit_deleted",
+      resourceType: "inventory_unit",
+      resourceId: unit.id,
+      metadata: { serialNumber: unit.serialNumber, productId: unit.productId },
+    });
+  });
+
   res.json({ success: true });
 };

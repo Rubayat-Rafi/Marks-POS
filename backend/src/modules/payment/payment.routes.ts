@@ -67,3 +67,9 @@ paymentRouter.post(
   requirePermission("payments.collect"),
   asyncHandler(paymentController.simulatePayment),
 );
+
+paymentRouter.delete(
+  "/:paymentId",
+  requirePermission("payments.collect"),
+  asyncHandler(paymentController.deletePayment),
+);

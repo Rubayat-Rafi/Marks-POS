@@ -9,6 +9,7 @@ import { ACCOUNT_CODES } from "../../domain/accounts.js";
 import { postJournalEntry, reverseJournalEntry, trialBalance } from "../../domain/ledger.js";
 import { dayBounds } from "../../lib/time.js";
 import { classifyLineDepartment } from "../../domain/shopDepartment.js";
+import { deleteJournalEntriesForSources } from "../../domain/deletion.js";
 
 
 export const listExpenses = async (req: Request, res: Response) => {
@@ -672,5 +673,71 @@ export const getDailyClosingSummary = async (req: Request, res: Response) => {
       transactionsCount: payments.length,
     },
   });
+};
+
+export const deleteExpense = async (req: Request, res: Response) => {
+  const ctx = auth(req);
+  const expense = await db.expense.findFirst({
+    where: { id: req.params.id, ...tenantScope(req) },
+  });
+  if (!expense) throw ApiError.notFound("Expense not found.");
+
+  await db.$transaction(async (tx) => {
+    await deleteJournalEntriesForSources(tx, ctx.organizationId, [expense.id]);
+    await tx.expense.delete({ where: { id: expense.id } });
+    await recordAudit(tx, {
+      organizationId: ctx.organizationId,
+      ...auditContext(req),
+      action: "expense.deleted",
+      resourceType: "expense",
+      resourceId: expense.id,
+      metadata: { vendor: expense.vendor, amount: expense.amount },
+    });
+  });
+
+  res.json({ success: true });
+};
+
+export const deleteCashSession = async (req: Request, res: Response) => {
+  const ctx = auth(req);
+  const session = await db.cashSession.findFirst({
+    where: { id: req.params.id, ...tenantScope(req) },
+  });
+  if (!session) throw ApiError.notFound("Cash session not found.");
+
+  await db.$transaction(async (tx) => {
+    await tx.reconciliationItem.deleteMany({
+      where: { organizationId: ctx.organizationId, reference: session.id },
+    });
+    await tx.cashSession.delete({ where: { id: session.id } });
+    await recordAudit(tx, {
+      organizationId: ctx.organizationId,
+      ...auditContext(req),
+      action: "cash.session_deleted",
+      resourceType: "cash_session",
+      resourceId: session.id,
+    });
+  });
+
+  res.json({ success: true });
+};
+
+export const deleteReconciliationItem = async (req: Request, res: Response) => {
+  const ctx = auth(req);
+  const item = await db.reconciliationItem.findFirst({
+    where: { id: req.params.id, ...tenantScope(req) },
+  });
+  if (!item) throw ApiError.notFound("Reconciliation item not found.");
+
+  await db.reconciliationItem.delete({ where: { id: item.id } });
+  await recordAudit(db, {
+    organizationId: ctx.organizationId,
+    ...auditContext(req),
+    action: "reconciliation.deleted",
+    resourceType: "reconciliation_item",
+    resourceId: item.id,
+  });
+
+  res.json({ success: true });
 };
 

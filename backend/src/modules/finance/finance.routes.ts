@@ -83,3 +83,21 @@ financeRouter.post(
   requirePermission("finance.reconcile"),
   asyncHandler(financeController.reverseJournal),
 );
+
+financeRouter.delete(
+  "/expenses/:id",
+  requirePermission("expenses.write"),
+  asyncHandler(financeController.deleteExpense),
+);
+
+financeRouter.delete(
+  "/cash-sessions/:id",
+  requirePermission("finance.reconcile"),
+  asyncHandler(financeController.deleteCashSession),
+);
+
+financeRouter.delete(
+  "/reconciliation/:id",
+  requirePermission("finance.reconcile"),
+  asyncHandler(financeController.deleteReconciliationItem),
+);

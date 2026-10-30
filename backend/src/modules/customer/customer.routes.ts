@@ -37,3 +37,9 @@ customerRouter.post(
   requirePermission("customers.write"),
   asyncHandler(customerController.archiveCustomer),
 );
+
+customerRouter.delete(
+  "/:id",
+  requirePermission("customers.write"),
+  asyncHandler(customerController.deleteCustomer),
+);

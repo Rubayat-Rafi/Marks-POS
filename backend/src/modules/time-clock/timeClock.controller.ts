@@ -4,6 +4,7 @@ import { db } from "../../db.js";
 import { ApiError } from "../../middlewares/error.middleware.js";
 import { queryDate } from "../../utils/query.js";
 import { auth, tenantScope } from "../../middlewares/auth.middleware.js";
+import { can } from "../../middlewares/rbac.middleware.js";
 import { auditContext, recordAudit } from "../../lib/audit.js";
 
 function hoursBetween(start: Date, end: Date): number {
@@ -207,4 +208,28 @@ export const getPayrollSummary = async (req: Request, res: Response) => {
     totalEstimatedPay: rows.reduce((s, r) => s + r.estimatedPay, 0),
     note: "An operational estimate from clocked hours and configured pay rates. It is not a payroll tax filing.",
   });
+};
+
+export const deleteEntry = async (req: Request, res: Response) => {
+  const ctx = auth(req);
+  const entry = await db.shiftClockEntry.findFirst({
+    where: { id: req.params.id, ...tenantScope(req) },
+  });
+  if (!entry) throw ApiError.notFound("Time clock entry not found.");
+
+  if (!can(ctx.role, "payroll.write") && entry.userId !== ctx.userId) {
+    throw ApiError.forbidden("You do not have permission to delete this time entry.");
+  }
+
+  await db.shiftClockEntry.delete({ where: { id: entry.id } });
+  await recordAudit(db, {
+    organizationId: ctx.organizationId,
+    ...auditContext(req),
+    action: "timeclock.deleted",
+    resourceType: "shift_clock_entry",
+    resourceId: entry.id,
+    metadata: { userId: entry.userId, clockInAt: entry.clockInAt },
+  });
+
+  res.json({ success: true });
 };

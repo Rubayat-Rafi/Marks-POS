@@ -30,15 +30,50 @@ type CustomerDetail = Customer & {
 
 export function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { can } = useAuth();
   const [addingVehicle, setAddingVehicle] = useState(false);
   const [startingJob, setStartingJob] = useState<Vehicle | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
+  const [confirmDeleteCustomer, setConfirmDeleteCustomer] = useState(false);
 
   const customer = useQuery({
     queryKey: ["customer", id],
     queryFn: () => api.get<CustomerDetail>(`/customers/${id}`),
     enabled: Boolean(id),
+  });
+
+  const refreshCustomer = () => {
+    void queryClient.invalidateQueries({ queryKey: ["customer", id] });
+    void queryClient.invalidateQueries({ queryKey: ["customers"] });
+    void queryClient.invalidateQueries({ queryKey: ["board"] });
+    void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+  };
+
+  const deleteCustomer = useMutation({
+    mutationFn: () => api.delete(`/customers/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["customers"] });
+      void queryClient.invalidateQueries({ queryKey: ["board"] });
+      void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      navigate("/customers");
+    },
+  });
+
+  const deleteVehicle = useMutation({
+    mutationFn: (vehicleId: string) => api.delete(`/vehicles/${vehicleId}`),
+    onSuccess: refreshCustomer,
+  });
+
+  const deleteJob = useMutation({
+    mutationFn: (roId: string) => api.delete(`/repair-orders/${roId}`),
+    onSuccess: refreshCustomer,
+  });
+
+  const deleteInvoice = useMutation({
+    mutationFn: (invId: string) => api.delete(`/invoices/${invId}`),
+    onSuccess: refreshCustomer,
   });
 
   const c = customer.data;
@@ -49,7 +84,7 @@ export function CustomerDetailPage() {
         title={c ? customerLabel(c) : "Customer"}
         description={c ? [c.phone, c.email].filter(Boolean).join("  ·  ") : undefined}
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {can("customers.write") && (
               <Button variant="secondary" onClick={() => setEditingProfile(true)}>
                 Edit profile
@@ -58,9 +93,44 @@ export function CustomerDetailPage() {
             {can("vehicles.write") && (
               <Button onClick={() => setAddingVehicle(true)}>Add vehicle</Button>
             )}
+            {can("customers.write") && c && (
+              <Button variant="danger" onClick={() => setConfirmDeleteCustomer(true)}>
+                Delete customer
+              </Button>
+            )}
           </div>
         }
       />
+
+      {confirmDeleteCustomer && c && (
+        <Modal
+          title={`Delete ${customerLabel(c)}?`}
+          onClose={() => !deleteCustomer.isPending && setConfirmDeleteCustomer(false)}
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              This will permanently delete <strong>{customerLabel(c)}</strong> along with all their vehicles, repair orders, estimates, invoices, and payments. This cannot be undone.
+            </p>
+            <ErrorBanner error={deleteCustomer.error} />
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setConfirmDeleteCustomer(false)}
+                disabled={deleteCustomer.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                loading={deleteCustomer.isPending}
+                onClick={() => deleteCustomer.mutate()}
+              >
+                Yes, Delete Customer
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       <DataState loading={customer.isLoading} error={customer.error}>
         {c && (
@@ -159,11 +229,31 @@ export function CustomerDetailPage() {
                           : "Entered manually"}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        {can("jobs.write") && (
-                          <Button variant="secondary" onClick={() => setStartingJob(vehicle)}>
-                            Start job
-                          </Button>
-                        )}
+                        <div className="flex items-center justify-end gap-2">
+                          {can("jobs.write") && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setStartingJob(vehicle)}
+                            >
+                              Start job
+                            </Button>
+                          )}
+                          {can("vehicles.write") && (
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              loading={deleteVehicle.isPending}
+                              onClick={() => {
+                                if (confirm(`Delete vehicle ${vehicleLabel(vehicle)} and its history?`)) {
+                                  deleteVehicle.mutate(vehicle.id);
+                                }
+                              }}
+                            >
+                              Delete
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -172,6 +262,7 @@ export function CustomerDetailPage() {
             </Card>
 
             <Card title="Service history">
+              <ErrorBanner error={deleteJob.error} />
               <DataState
                 empty={c.repairOrders.length === 0}
                 emptyMessage="This customer has no jobs yet."
@@ -186,9 +277,25 @@ export function CustomerDetailPage() {
                         <StatusBadge status={ro.status} />
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <Link to={`/jobs/${ro.id}`} className="text-sm text-teal-700 hover:underline">
-                          Open
-                        </Link>
+                        <div className="flex items-center justify-end gap-2">
+                          <Link to={`/jobs/${ro.id}`} className="text-sm text-teal-700 hover:underline">
+                            Open
+                          </Link>
+                          {can("jobs.write") && (
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              loading={deleteJob.isPending}
+                              onClick={() => {
+                                if (confirm(`Delete job ${ro.number}?`)) {
+                                  deleteJob.mutate(ro.id);
+                                }
+                              }}
+                            >
+                              Delete
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -198,6 +305,7 @@ export function CustomerDetailPage() {
 
             {can("invoices.read") && (
               <Card title="Invoices">
+                <ErrorBanner error={deleteInvoice.error} />
                 <DataState empty={c.invoices.length === 0} emptyMessage="No invoices yet.">
                   <Table headers={["Invoice", "Issued", "Total", "Balance", "Status", ""]}>
                     {c.invoices.map((inv) => (
@@ -212,15 +320,37 @@ export function CustomerDetailPage() {
                           <StatusBadge status={inv.status} />
                         </td>
                         <td className="px-3 py-2 text-right">
-                          {can("payments.collect") &&
-                            (inv.status === "ISSUED" || inv.status === "PARTLY_PAID") && (
-                              <Link
-                                to={`/quick-sale/${inv.id}`}
-                                className="text-sm text-teal-700 hover:underline"
+                          <div className="flex items-center justify-end gap-2">
+                            <Link
+                              to={`/receipts/${inv.id}`}
+                              className="text-sm text-slate-600 hover:underline"
+                            >
+                              Receipt
+                            </Link>
+                            {can("payments.collect") &&
+                              (inv.status === "ISSUED" || inv.status === "PARTLY_PAID") && (
+                                <Link
+                                  to={`/quick-sale/${inv.id}`}
+                                  className="text-sm text-teal-700 hover:underline"
+                                >
+                                  Collect
+                                </Link>
+                              )}
+                            {can("invoices.write") && (
+                              <Button
+                                variant="danger"
+                                size="sm"
+                                loading={deleteInvoice.isPending}
+                                onClick={() => {
+                                  if (confirm(`Delete invoice ${inv.number}?`)) {
+                                    deleteInvoice.mutate(inv.id);
+                                  }
+                                }}
                               >
-                                Collect
-                              </Link>
+                                Delete
+                              </Button>
                             )}
+                          </div>
                         </td>
                       </tr>
                     ))}

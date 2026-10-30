@@ -63,6 +63,8 @@ export function TimeClockPage() {
 }
 
 function MyHistory() {
+  const { can } = useAuth();
+  const queryClient = useQueryClient();
   const [from, setFrom] = useState(isoDay(-13));
   const [to, setTo] = useState(isoDay(0));
 
@@ -72,6 +74,15 @@ function MyHistory() {
       api.get<{ data: ShiftClockEntry[]; totalHours: number }>(
         `/time-clock/me?from=${new Date(from).toISOString()}&to=${new Date(`${to}T23:59:59`).toISOString()}`,
       ),
+  });
+
+  const deleteEntry = useMutation({
+    mutationFn: (id: string) => api.delete(`/time-clock/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["timeclock-me"] });
+      void queryClient.invalidateQueries({ queryKey: ["timeclock-all"] });
+      void queryClient.invalidateQueries({ queryKey: ["payroll-summary"] });
+    },
   });
 
   return (
@@ -97,7 +108,7 @@ function MyHistory() {
         empty={history.data?.data.length === 0}
         emptyMessage="No punches in this range."
       >
-        <Table headers={["Clocked in", "Clocked out", "Hours", "Note"]}>
+        <Table headers={["Clocked in", "Clocked out", "Hours", "Note", ""]}>
           {history.data?.data.map((e) => (
             <tr key={e.id}>
               <td className="px-3 py-2 text-slate-600">{dateTime(e.clockInAt)}</td>
@@ -108,6 +119,22 @@ function MyHistory() {
                 {hoursBetween(e.clockInAt, e.clockOutAt).toFixed(2)}
               </td>
               <td className="px-3 py-2 text-xs text-slate-500">{e.note ?? "—"}</td>
+              <td className="px-3 py-2 text-right">
+                {can("payroll.write") && (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    loading={deleteEntry.isPending}
+                    onClick={() => {
+                      if (confirm("Delete this time clock punch?")) {
+                        deleteEntry.mutate(e.id);
+                      }
+                    }}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </td>
             </tr>
           ))}
         </Table>
@@ -149,6 +176,15 @@ function PayrollSection() {
       api.get<{ data: ShiftClockEntry[] }>(
         `/time-clock?from=${new Date(from).toISOString()}&to=${new Date(`${to}T23:59:59`).toISOString()}`,
       ),
+  });
+
+  const deleteEntry = useMutation({
+    mutationFn: (id: string) => api.delete(`/time-clock/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["timeclock-all"] });
+      void queryClient.invalidateQueries({ queryKey: ["timeclock-me"] });
+      void queryClient.invalidateQueries({ queryKey: ["payroll-summary"] });
+    },
   });
 
   return (
@@ -224,9 +260,23 @@ function PayrollSection() {
                 <td className="px-3 py-2 text-xs text-slate-500">{e.note ?? "—"}</td>
                 <td className="px-3 py-2 text-right">
                   {can("payroll.write") && (
-                    <Button variant="secondary" onClick={() => setCorrecting(e)}>
-                      Correct
-                    </Button>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="secondary" size="sm" onClick={() => setCorrecting(e)}>
+                        Correct
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        loading={deleteEntry.isPending}
+                        onClick={() => {
+                          if (confirm("Delete this time clock punch?")) {
+                            deleteEntry.mutate(e.id);
+                          }
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </div>
                   )}
                 </td>
               </tr>

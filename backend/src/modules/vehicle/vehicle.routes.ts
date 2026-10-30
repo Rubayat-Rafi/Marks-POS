@@ -67,3 +67,9 @@ vehicleRouter.post(
   requirePermission("vehicles.write"),
   asyncHandler(vehicleController.applyDecode),
 );
+
+vehicleRouter.delete(
+  "/:id",
+  requirePermission("vehicles.write"),
+  asyncHandler(vehicleController.deleteVehicle),
+);

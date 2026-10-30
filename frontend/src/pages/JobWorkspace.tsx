@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   customerLabel,
@@ -55,10 +55,12 @@ const ALL_STATUSES: RepairOrderStatus[] = [
 
 export function JobWorkspacePage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { can } = useAuth();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("overview");
   const [approvalUrl, setApprovalUrl] = useState<string | null>(null);
+  const [confirmDeleteJob, setConfirmDeleteJob] = useState(false);
 
   const job = useQuery({
     queryKey: ["job", id],
@@ -80,6 +82,15 @@ export function JobWorkspacePage() {
     onSuccess: refresh,
   });
 
+  const deleteJob = useMutation({
+    mutationFn: () => api.delete(`/repair-orders/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["board"] });
+      void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      navigate("/board");
+    },
+  });
+
   const ro = job.data;
 
   return (
@@ -89,7 +100,7 @@ export function JobWorkspacePage() {
         description={ro ? `${customerLabel(ro.customer)}  ·  ${ro.concern}` : undefined}
         action={
           ro ? (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={ro.status} />
               {can("jobs.write") && ro.status !== "DELIVERED" && ro.status !== "CANCELLED" && (
                 <Select
@@ -111,10 +122,47 @@ export function JobWorkspacePage() {
                   ))}
                 </Select>
               )}
+              {can("jobs.write") && (
+                <Button variant="danger" size="sm" onClick={() => setConfirmDeleteJob(true)}>
+                  Delete Job
+                </Button>
+              )}
             </div>
           ) : undefined
         }
       />
+
+      {confirmDeleteJob && ro && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 className="text-base font-bold text-slate-900">Delete Job {ro.number}?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              This will permanently delete repair order <strong>{ro.number}</strong> along with its tasks, inspections, estimates, and linked invoices, and restore consumed catalog parts. This cannot be undone.
+            </p>
+            {deleteJob.error && (
+              <div className="mt-3">
+                <ErrorBanner error={deleteJob.error} />
+              </div>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setConfirmDeleteJob(false)}
+                disabled={deleteJob.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                loading={deleteJob.isPending}
+                onClick={() => deleteJob.mutate()}
+              >
+                Yes, Delete Job
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cancelling a job does not cancel supplier orders or refund payments;
           the server returns those warnings and they are shown, not swallowed. */}
@@ -398,12 +446,21 @@ function EstimateCard({
 }) {
   const { can } = useAuth();
   const [revising, setRevising] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const latest: EstimateVersion | undefined = estimate.versions[0];
 
   const send = useMutation({
     mutationFn: (versionId: string) =>
       api.post<{ approvalUrl: string }>(`/estimates/versions/${versionId}/send`),
     onSuccess: (result) => onSent(result.approvalUrl),
+  });
+
+  const deleteEstimate = useMutation({
+    mutationFn: () => api.delete(`/estimates/${estimate.id}`),
+    onSuccess: () => {
+      setConfirmDelete(false);
+      onRevised();
+    },
   });
 
   const revise = useMutation({
@@ -440,7 +497,7 @@ function EstimateCard({
             <StatusBadge status={latest.status} />
           </span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {latest.status === "DRAFT" && can("estimates.write") && (
             <Button
               variant="secondary"
@@ -457,11 +514,37 @@ function EstimateCard({
               Revise for extra work
             </Button>
           )}
+          {can("estimates.write") && (
+            confirmDelete ? (
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="danger"
+                  size="sm"
+                  loading={deleteEstimate.isPending}
+                  onClick={() => deleteEstimate.mutate()}
+                >
+                  Confirm Delete
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setConfirmDelete(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>
+                Delete
+              </Button>
+            )
+          )}
         </div>
       </div>
 
       <ErrorBanner error={send.error} />
       <ErrorBanner error={revise.error} />
+      <ErrorBanner error={deleteEstimate.error} />
 
       {revising ? (
         <ReviseForm
@@ -646,6 +729,7 @@ function EstimateBuilder({
 
 function InvoiceSection({ job, onRefresh }: { job: RepairOrder; onRefresh: () => void }) {
   const { can } = useAuth();
+  const [confirmDeleteInvId, setConfirmDeleteInvId] = useState<string | null>(null);
 
   const createInvoice = useMutation({
     mutationFn: () => api.post<Invoice>(`/invoices/from-repair-order/${job.id}`),
@@ -655,6 +739,14 @@ function InvoiceSection({ job, onRefresh }: { job: RepairOrder; onRefresh: () =>
   const issueInvoice = useMutation({
     mutationFn: (invoiceId: string) => api.post<Invoice>(`/invoices/${invoiceId}/issue`),
     onSuccess: onRefresh,
+  });
+
+  const deleteInvoice = useMutation({
+    mutationFn: (invoiceId: string) => api.delete(`/invoices/${invoiceId}`),
+    onSuccess: () => {
+      setConfirmDeleteInvId(null);
+      onRefresh();
+    },
   });
 
   return (
@@ -674,6 +766,7 @@ function InvoiceSection({ job, onRefresh }: { job: RepairOrder; onRefresh: () =>
     >
       <ErrorBanner error={createInvoice.error} />
       <ErrorBanner error={issueInvoice.error} />
+      <ErrorBanner error={deleteInvoice.error} />
 
       <DataState
         empty={(job.invoices?.length ?? 0) === 0}
@@ -689,7 +782,7 @@ function InvoiceSection({ job, onRefresh }: { job: RepairOrder; onRefresh: () =>
                     <StatusBadge status={inv.status} />
                   </span>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {inv.status === "DRAFT" && can("invoices.write") && (
                     <Button
                       loading={issueInvoice.isPending}
@@ -709,6 +802,35 @@ function InvoiceSection({ job, onRefresh }: { job: RepairOrder; onRefresh: () =>
                         <Button>Collect payment</Button>
                       </Link>
                     )}
+                  {can("invoices.write") && (
+                    confirmDeleteInvId === inv.id ? (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          loading={deleteInvoice.isPending}
+                          onClick={() => deleteInvoice.mutate(inv.id)}
+                        >
+                          Confirm Delete
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setConfirmDeleteInvId(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => setConfirmDeleteInvId(inv.id)}
+                      >
+                        Delete invoice
+                      </Button>
+                    )
+                  )}
                 </div>
               </div>
 

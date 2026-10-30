@@ -89,7 +89,25 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 }
 
 export const api = {
-  get: <T>(path: string, opts?: RequestOptions) => request<T>(path, opts),
+  get: <T>(path: string, optsOrParams?: RequestOptions | Record<string, string | number | boolean | undefined>) => {
+    if (
+      optsOrParams &&
+      typeof optsOrParams === "object" &&
+      !("method" in optsOrParams) &&
+      !("body" in optsOrParams) &&
+      !("anonymous" in optsOrParams) &&
+      !("signal" in optsOrParams)
+    ) {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(optsOrParams)) {
+        if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+      }
+      const queryStr = qs.toString();
+      const fullPath = queryStr ? `${path}${path.includes("?") ? "&" : "?"}${queryStr}` : path;
+      return request<T>(fullPath);
+    }
+    return request<T>(path, optsOrParams as RequestOptions | undefined);
+  },
   post: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
     request<T>(path, { ...opts, method: "POST", body }),
   patch: <T>(path: string, body?: unknown, opts?: RequestOptions) =>

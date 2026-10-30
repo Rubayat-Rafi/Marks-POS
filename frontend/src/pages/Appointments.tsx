@@ -110,6 +110,22 @@ export function AppointmentsPage() {
     },
   });
 
+  const deleteRequest = useMutation({
+    mutationFn: (id: string) => api.delete(`/booking-requests/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["booking-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+
+  const deleteAppointment = useMutation({
+    mutationFn: (id: string) => api.delete(`/appointments/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+
   // Group by calendar day so the advisor reads a schedule, not a flat list.
   const byDay = new Map<string, Appointment[]>();
   for (const appt of appointments.data?.data ?? []) {
@@ -308,6 +324,21 @@ export function AppointmentsPage() {
                         Dismiss
                       </button>
                     )}
+
+                    {can("bookings.write") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm(`Delete booking request from ${req.name}?`)) {
+                            deleteRequest.mutate(req.id);
+                          }
+                        }}
+                        disabled={deleteRequest.isPending}
+                        className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -402,25 +433,41 @@ export function AppointmentsPage() {
                             <StatusBadge status={appt.status} />
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-right">
-                            {appt.repairOrder ? (
-                              <Link
-                                to={`/jobs/${appt.repairOrder.id}`}
-                                className="font-semibold text-teal-700 hover:underline"
-                              >
-                                RO #{appt.repairOrder.number} ({titleCase(appt.repairOrder.status)})
-                              </Link>
-                            ) : can("jobs.write") &&
-                              appt.status !== "CHECKED_IN" &&
-                              appt.status !== "CANCELLED" ? (
-                              <button
-                                type="button"
-                                onClick={() => checkIn.mutate({ id: appt.id })}
-                                disabled={checkIn.isPending}
-                                className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                              >
-                                Check in
-                              </button>
-                            ) : null}
+                            <div className="flex items-center justify-end gap-2">
+                              {appt.repairOrder ? (
+                                <Link
+                                  to={`/jobs/${appt.repairOrder.id}`}
+                                  className="font-semibold text-teal-700 hover:underline"
+                                >
+                                  RO #{appt.repairOrder.number} ({titleCase(appt.repairOrder.status)})
+                                </Link>
+                              ) : can("jobs.write") &&
+                                appt.status !== "CHECKED_IN" &&
+                                appt.status !== "CANCELLED" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => checkIn.mutate({ id: appt.id })}
+                                  disabled={checkIn.isPending}
+                                  className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                >
+                                  Check in
+                                </button>
+                              ) : null}
+                              {can("appointments.write") && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (confirm(`Delete appointment for ${customerLabel(appt.customer)}?`)) {
+                                      deleteAppointment.mutate(appt.id);
+                                    }
+                                  }}
+                                  disabled={deleteAppointment.isPending}
+                                  className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                                >
+                                  Delete
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}

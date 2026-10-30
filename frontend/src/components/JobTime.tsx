@@ -62,14 +62,20 @@ export function JobTime({ jobId, entries }: { jobId: string; entries: TimeEntry[
     },
   });
 
+  const deleteTime = useMutation({
+    mutationFn: (timeEntryId: string) => api.delete(`/repair-orders/time/${timeEntryId}`),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["job", jobId] }),
+  });
+
   const totalWorked = entries.reduce((sum, e) => sum + num(e.workedHours), 0);
 
   return (
     <div className="space-y-3">
       <ErrorBanner error={log.error} />
+      <ErrorBanner error={deleteTime.error} />
 
       <DataState empty={entries.length === 0} emptyMessage="No time logged on this job yet.">
-        <Table headers={["Technician", "Started", "Ended", "Worked hours", "Note"]}>
+        <Table headers={["Technician", "Started", "Ended", "Worked hours", "Note", ""]}>
           {entries.map((e) => (
             <tr key={e.id}>
               <td className="px-3 py-2">
@@ -81,6 +87,18 @@ export function JobTime({ jobId, entries }: { jobId: string; entries: TimeEntry[
               </td>
               <td className="px-3 py-2 tabular-nums">{num(e.workedHours).toFixed(2)}</td>
               <td className="px-3 py-2 text-xs text-slate-500">{e.note ?? "—"}</td>
+              <td className="px-3 py-2 text-right">
+                {can("jobs.write") && (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    loading={deleteTime.isPending}
+                    onClick={() => deleteTime.mutate(e.id)}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </td>
             </tr>
           ))}
         </Table>

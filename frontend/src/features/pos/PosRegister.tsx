@@ -3228,6 +3228,19 @@ function OpenBalancesRegister({
   const [payMethod, setPayMethod] = useState<PayMethod>("CASH");
   const [tenderedInput, setTenderedInput] = useState("");
   const [amountInput, setAmountInput] = useState("");
+  const [confirmDeleteInv, setConfirmDeleteInv] = useState<Invoice | null>(null);
+  const { can } = useAuth();
+
+  const deleteInvoiceMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/invoices/${id}`),
+    onSuccess: () => {
+      setConfirmDeleteInv(null);
+      onSelectInvoiceId(null);
+      void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      void queryClient.invalidateQueries({ queryKey: ["finance"] });
+      void queryClient.invalidateQueries({ queryKey: ["inventory"] });
+    },
+  });
 
   useEffect(() => {
     if (balance > 0) {
@@ -3446,6 +3459,17 @@ function OpenBalancesRegister({
               <Icon name="cash" className="h-5 w-5" />
               Collect {money(amt ?? balance)}
             </Button>
+
+            {can("invoices.write") && (
+              <Button
+                size="md"
+                variant="danger"
+                onClick={() => setConfirmDeleteInv(activeInv)}
+              >
+                <Icon name="trash" className="h-4 w-4" />
+                Delete Invoice #{activeInv.number}
+              </Button>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center text-slate-400 p-6">
@@ -3454,6 +3478,37 @@ function OpenBalancesRegister({
           </div>
         )}
       </div>
+
+      {confirmDeleteInv && (
+        <Modal
+          title={`Delete Invoice #${confirmDeleteInv.number}?`}
+          onClose={() => setConfirmDeleteInv(null)}
+        >
+          <div className="space-y-4">
+            <ErrorBanner error={deleteInvoiceMutation.error} />
+            <p className="text-sm text-slate-700">
+              Permanently delete invoice{" "}
+              <span className="font-mono font-bold text-ink">#{confirmDeleteInv.number}</span> for{" "}
+              <span className="font-semibold">{customerLabel(confirmDeleteInv.customer)}</span>?
+            </p>
+            <p className="text-xs text-slate-500">
+              Any serialized items sold on this invoice will be returned to stock.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="secondary" onClick={() => setConfirmDeleteInv(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                loading={deleteInvoiceMutation.isPending}
+                onClick={() => deleteInvoiceMutation.mutate(confirmDeleteInv.id)}
+              >
+                <Icon name="trash" className="h-4 w-4" /> Delete Invoice
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
